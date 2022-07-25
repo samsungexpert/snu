@@ -1,7 +1,11 @@
 
-import torchvision
+from sklearn.feature_extraction import img_to_graph
+import torch, torchvision
 from torchvision import transforms, datasets
 
+
+IMG_HEIGHT = 128
+IMG_WIDTH  = 128
 
 from torchvision.transforms.transforms import ConvertImageDtype
 upsize = 286

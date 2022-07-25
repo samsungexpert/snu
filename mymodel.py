@@ -31,6 +31,10 @@ def mymodel(model_name:str, input_size=(128,128)):
     return model
 
 
+def discriminator(model_name, input_size=(128,128)):
+    model=None
+    return model
+
 
 def main():
     # model = mymodel('bwunet')
