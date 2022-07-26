@@ -10,7 +10,7 @@ from torchvision import models, transforms
 from models import networks
 
 
-def mymodel(model_name:str, input_size=(128,128)):
+def mygen_model(model_name:str):
     print('network: ', model_name)
 
     valid_model_name = ('resnet', 'unet', 'bwunet')
@@ -31,18 +31,26 @@ def mymodel(model_name:str, input_size=(128,128)):
     return model
 
 
-def discriminator(model_name, input_size=(128,128)):
-    model=None
+def mydisc_model(model_name:str='basic'):
+
+    if model_name not in ['basic', 'n_layers', 'pixel']:
+        raise NotImplementedError('Discriminator model name [%s] is not recognized' % model_name)
+
+    model = networks.define_D(input_nc=(3+3), ndf=64, netD=model_name, n_layers_D=3)
+
+
     return model
 
 
 def main():
-    # model = mymodel('bwunet')
-    # model = mymodel('unet')
-    model =  mymodel('resnet')
+    model = mygen_model('bwunet')
+    # model = mygen_model('unet')
+    # model =  mygen_model('resnet')
+
+    model =  mydisc_model('basic')
 
     print(model)
-    torchsummary.summary(model, input_size=(3, 128, 128))
+    torchsummary.summary(model, input_size=(6, 128, 128))
 
 
 if __name__ == '__main__':

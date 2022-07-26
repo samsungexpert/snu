@@ -32,8 +32,8 @@ def give_me_transform(type):
     return transform
 
 
-def give_me_dataloader(dataset, batch_size:int, shuffle=True, drop_last=False):
-    return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, drop_last=drop_last)
+def give_me_dataloader(dataset, batch_size:int, shuffle=True, num_workers=4, drop_last=False):
+    return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers, drop_last=drop_last)
 
 
 class SingleDataset(DataLoader):
