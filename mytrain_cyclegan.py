@@ -1,8 +1,10 @@
 # https://www.kaggle.com/code/songseungwon/cyclegan-tutorial-from-scratch-monet-to-photo
+
 import os
 import time
 import argparse
-import torch, torchvision, torchsummary
+import torch
+import torchvision
 import numpy as np
 from tqdm import tqdm
 from torch import nn, optim
@@ -43,8 +45,8 @@ def degamma_visualization(rgbimage):
 
 
 def train(args):
-    device  = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print('This machine has ', device)
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    print('train with', device)
     print(args)
     # args
     model_name      = args.model_name
@@ -52,11 +54,8 @@ def train(args):
     dataset_path    = args.dataset_path
     input_size      = args.input_size
     batch_size      = args.batch_size
-    device         = args.device
+    device          = args.device
     learning_rate   = args.lr
-
-
-
 
     print('model_name = ', model_name)
     print('input_size = ', input_size)
@@ -95,26 +94,51 @@ def train(args):
     model_D_raw2rgb = mydisc_model('basic').to(device)
 
 
-    # print(model_D_raw2rgb.shape)
-
-    # torchsummary.summary(model_D_raw2rgb.to('cpu'), input_size=(3, 256, 256))
-    # exit()
-
-
     ## ckpt save load if any
+    ckpt_path_name = f"checkpoint/{dataset_name}"
+    os.makedirs(ckpt_path_name, exist_ok=True)
+    ckpt_list = os.listdir(args.checkpoint_path)
     if (args.checkpoint_path is not None) and \
-        (len(os.listdir(args.checkpoint_path) ) > 0) :
-        checkpoint = torch.load(args.checkpoint_path, map_location=device)
-        model_G_rgb2raw.load_state_dict(checkpoint["model_G_rgb2raw_state_dict"])
-        model_G_raw2rgb.load_state_dict(checkpoint["model_G_raw2rgb_state_dict"])
-        model_D_rgb2raw.load_state_dict(checkpoint["model_D_rgb2raw_state_dict"])
-        model_D_raw2rgb.load_state_dict(checkpoint["model_D_raw2rgb_state_dict"])
+        (len(ckpt_list) > 0) :
+
+        ckpt_list.sort()
+        ckpt_name = os.path.join(ckpt_path_name, ckpt_list[-1])
+        print('ckpt name = ', ckpt_name)
+        checkpoint = torch.load(ckpt_name, map_location=device)
+
+
+        model_G_rgb2raw.load_state_dict(checkpoint["model_G_rgb2raw"])
+        model_G_raw2rgb.load_state_dict(checkpoint["model_G_raw2rgb"])
+        model_D_rgb2raw.load_state_dict(checkpoint["model_D_rgb2raw"])
+        model_D_raw2rgb.load_state_dict(checkpoint["model_D_raw2rgb"])
         epoch = checkpoint["epoch"]
     else:
-        os.makedirs(f"checkpoint/{dataset_name}", exist_ok=True)
         epoch = 0
+        try:
+            fname = os.path.join(ckpt_path_name, f"{epoch}.pth")
+            if os.path.exists(fname):
+                fname = fname.split('.pth')[0] + '_1.pth'
 
 
+            torch.save(
+                    {
+                        "model_G_rgb2raw": model_G_rgb2raw.state_dict(),
+                        "model_G_raw2rgb": model_G_raw2rgb.state_dict(),
+                        "model_D_rgb2raw": model_D_rgb2raw.state_dict(),
+                        "model_D_raw2rgb": model_D_raw2rgb.state_dict(),
+                        "epoch": epoch,
+                    },
+                    fname,
+            )
+        except:
+            print('skip')
+
+
+
+    model_G_rgb2raw.train()
+    model_G_raw2rgb.train()
+    model_D_rgb2raw.train()
+    model_D_raw2rgb.train()
 
     # Loss
     criterion_bayer = BayerLoss()
@@ -122,9 +146,7 @@ def train(args):
     criterion_identity = nn.L1Loss()
     criterion_GAN = nn.MSELoss()
 
-    dispG = LossDisplayer(["G_GAN", "G_recon", "Dg"])
-    dispF = LossDisplayer(["F_GAN", "F_recon", "Df"])
-    summary = SummaryWriter()
+
 
     # Optimizer, Schedular
     optim_G = optim.Adam(
@@ -147,21 +169,27 @@ def train(args):
 
     # Training
     # logger for tensorboard.
-    logger = SummaryWriter()
+
+    disp_train = LossDisplayer(["G_train",
+                                "G_GAN_train",
+                                "G_Identity_train",
+                                "G_Cycle_train",
+                                "D_train"])
+    disp_valid = LossDisplayer(["G_valid",
+                                "G_GAN_valid",
+                                "G_Identity_valid",
+                                "G_Cycle_valid",
+                                "D_valid"])
+
+    disp = {'train':disp_train, 'valid':disp_valid}
+    summary = SummaryWriter()
     step = 0
     loss_G_RGB2Raw  = 0
     loss_D_RGB2Raw  = 0
     loss_G_Raw2RGB  = 0
     loss_D_Raw2RGB  = 0
-    # model_G_rgb2raw.train()
-    # model_G_raw2rgb.train()
-    # model_D_rgb2raw.train()
-    # model_D_raw2rgb.train()
 
-
-    valid = torch.Tensor(np.ones( (batch_size, 1, 30, 30))) # requires_grad = False. Default.
-    fake  = torch.Tensor(np.zeros((batch_size, 1, 30, 30))) # requires_grad = False. Default.
-
+    loss_best_G = 1e10
 
     while epoch < args.epoch:
         epoch += 1
@@ -176,32 +204,25 @@ def train(args):
 
 
 
+                if state == 'train':
+                    # train mode
+                    model_G_rgb2raw.train()
+                    model_G_raw2rgb.train()
+                    optim_G.zero_grad()
+                else:
+                    # eval mode
+                    model_G_rgb2raw.eval()
+                    model_G_raw2rgb.eval()
+
 
                 # degamma to make raw image
-                real_rgb = rgbimage.to(device)
+                real_rgb     = rgbimage.to(device)
                 real_raw = degamma(rgbimage).to(device)
-
-
-                # torch.ones_like(pred_fake_raw)
 
                 # -----------------
                 # Train Generators
                 # -----------------
-                model_G_rgb2raw.train()
-                model_G_raw2rgb.train()
-
-                optim_G.zero_grad()
-
-
-                # Identity loss
-                identity_rgb = model_G_raw2rgb(real_rgb)
-                identity_raw = model_G_rgb2raw(real_raw)
-
-                loss_identity_rgb = criterion_identity(identity_rgb, real_rgb)
-                loss_identity_raw = criterion_identity(identity_raw, real_raw)
-
-                loss_identity = (loss_identity_rgb + loss_identity_raw)/2
-
+                loss_G = 0
 
 
                 # GAN Loss
@@ -210,126 +231,115 @@ def train(args):
                 pred_fake_raw = model_D_rgb2raw(fake_raw)
                 pred_fake_rgb = model_D_raw2rgb(fake_rgb)
 
-                valid = torch.Tensor(np.ones_like( pred_fake_raw.detach().cpu().numpy())).to(device)
-                fake  = torch.Tensor(np.zeros_like(pred_fake_raw.detach().cpu().numpy())).to(device)
+                loss_GAN_raw = criterion_GAN(pred_fake_raw, torch.ones_like(pred_fake_raw))
+                loss_GAN_rgb = criterion_GAN(pred_fake_rgb, torch.ones_like(pred_fake_rgb))
 
-                print('valid.shape', valid.shape)
-                print('pred_fake_raw.shape', pred_fake_raw.shape)
-
-                loss_GAN_raw = criterion_GAN(pred_fake_raw, valid)
-                loss_GAN_rgb = criterion_GAN(pred_fake_rgb, valid)
-
-                loss_GAN = (loss_GAN_raw + loss_GAN_rgb)/2
-
-
+                loss_GAN = (loss_GAN_raw  + loss_GAN_rgb) / 2
+                loss_G += loss_GAN
 
                 # Cycle Loss
                 cycle_rgb = model_G_raw2rgb(fake_raw)
                 cycle_raw = model_G_rgb2raw(fake_rgb)
 
-                loss_cycle_A = criterion_cycle(cycle_rgb, real_rgb)
-                loss_cycle_B = criterion_cycle(cycle_raw, real_raw)
-
-                loss_cycle = (loss_cycle_A + loss_cycle_B)/2
-
-
-                # Total loss
-                loss_G = loss_GAN + args.lambda_ide * loss_cycle + 5.0 * loss_identity
+                loss_cycle_rgb = criterion_cycle(cycle_rgb, real_rgb)
+                loss_cycle_raw = criterion_cycle(cycle_raw, real_raw)
+                loss_cycle = (loss_cycle_rgb + loss_cycle_raw) / 2
+                loss_G += args.lambda_cycle * loss_cycle
 
 
+                # Identity Loss
+                if True: #args.identity:
+                    identity_rgb = model_G_raw2rgb(real_rgb)
+                    identity_raw = model_G_rgb2raw(real_raw)
+                    loss_identity_rgb = criterion_identity(identity_rgb, real_rgb)
+                    loss_identity_raw = criterion_identity(identity_raw, real_raw)
+                    loss_identity = (loss_identity_rgb + loss_identity_raw) / 2
 
-                # Backward
-                loss_G.backward()
-                optim_G.step()
+                    loss_G += args.lambda_ide *  loss_identity
 
-
+                loss_g_step = loss_G.item()
+                if state == 'train':
+                    loss_G.backward()
+                    optim_G.step()
 
                 # -----------------
                 # Train Discriminator Raw
                 # -----------------
-                optim_D_raw.zero_grad()
+                if state == 'train':
+                    optim_D_raw.zero_grad()
+                    optim_D_rgb.zero_grad()
 
                 pred_real_raw = model_D_rgb2raw(real_raw)
                 pred_fake_raw = model_D_rgb2raw(fake_raw.detach())
 
-
-                loss_D_raw = 0.5 * (   criterion_GAN(pred_real_raw, valid)
-                                     + criterion_GAN(pred_fake_raw, fake))
-
-
-                loss_D_raw.backward()
-                optim_D_raw.step()
+                loss_D_raw = 0.5 * (   criterion_GAN(pred_real_raw, torch.ones_like(pred_fake_raw))
+                                     + criterion_GAN(pred_fake_raw, torch.zeros_like(pred_fake_raw)))
 
 
                 # -----------------
                 # Train Discriminator RGB
                 # -----------------
-                optim_D_rgb.zero_grad()
-
                 pred_real_rgb = model_D_rgb2raw(real_rgb)
                 pred_fake_rgb = model_D_rgb2raw(fake_rgb.detach())
 
 
-                loss_D_rgb = 0.5 * (   criterion_GAN(pred_real_rgb, valid)
-                                     + criterion_GAN(pred_fake_rgb, fake))
+                loss_D_rgb = 0.5 * (   criterion_GAN(pred_real_rgb, torch.ones_like(pred_fake_raw))
+                                     + criterion_GAN(pred_fake_rgb, torch.zeros_like(pred_fake_raw)) )
 
 
-                loss_D_rgb.backward()
-                optim_D_rgb.step()
-
-
-                # ------> Total Loss
                 loss_D = (loss_D_raw + loss_D_rgb)/2
 
-                # # Calculate and backward generator model losses
+                # backward for discriminator
+                if state == 'train':
+                    loss_D_raw.backward()
+                    loss_D_rgb.backward()
+                    optim_D_raw.step()
+                    optim_D_rgb.step()
+                    step+=1
+                    if loss_best_G > loss_G:
+                        loss_best_G = loss_G
+                        summary.add_scalar(f"loss_best_G{state}", loss_best_G, step)
 
 
+                # record loss for tensorboard
 
-                # if state == 'train':
-                #     # train mode
+                disp[state].record([loss_G, loss_GAN, loss_identity, loss_cycle, loss_D])
+                if step%10==0 :
+                    avg_losses = disp[state].get_avg_losses()
+                    summary.add_scalar(f"loss_G_{state}", avg_losses[0], step)
+                    summary.add_scalar(f"loss_G_G_GAN_{state}", avg_losses[1], step)
+                    summary.add_scalar(f"loss_G_Identity_{state}", avg_losses[2], step)
+                    summary.add_scalar(f"loss_G_Cycle_{state}", avg_losses[3], step)
+                    summary.add_scalar(f"loss_D_{state}", avg_losses[4], step)
 
+                    print(f'{state} : epoch{epoch}, step{step}------------------------------------------------------')
+                    print('loss_G:          \t', avg_losses[0])
+                    print('loss_G_G_GAN:    \t', avg_losses[1])
+                    print('loss_G_Identity: \t', avg_losses[2])
+                    print('loss_G_Cycle:    \t', avg_losses[3])
+                    print('loss_D:          \t', avg_losses[4])
 
+                    disp[state].reset()
 
-                #     # Backward G
-                #     optim_G.zero_grad()
-                #     loss_G.backward()
-                #     optim_G.step()
-                #     loss_g_step = loss_G.item()
-
-
-                #     # Calculate and backward discriminator model losses
-                #     # Backward D_raw
-
-
-                #     # Backward D_rgb
-                #     pred_real_rgb = model_D_rgb2raw(rgb_image)
-
-                #     loss_D_rgb = 0.5 * ( criterion_GAN(pred_real_rgb, torch.ones_like(pred_real_rgb))
-                #                        + criterion_GAN(pred_fake_rgb, torch.zeros_like(pred_fake_rgb)) )
-
-                #     optim_D_rgb.zero_grad()
-                #     loss_D_rgb.backward(retain_graph=True)
-                #     optim_D_rgb.step()
-
-
-                    # step+=1
-
-
-
-
-
-
-                # if state == 'valid':
-                #     pass
-
-
-                # if step %1 == 0:
-                #     logger.add_scalar('loss_G', loss_g_rgb2raw, step)
 
         # Step scheduler
         scheduler_G.step()
         scheduler_D_rgb2raw.step()
         scheduler_D_raw2rgb.step()
+
+
+        # Save checkpoint
+        if epoch % 10 == 0:
+            torch.save(
+                {
+                    "model_G_rgb2raw": model_G_rgb2raw.state_dict(),
+                    "model_G_raw2rgb": model_G_raw2rgb.state_dict(),
+                    "model_D_rgb2raw": model_D_rgb2raw.state_dict(),
+                    "model_D_raw2rgb": model_D_raw2rgb.state_dict(),
+                    "epoch": epoch,
+                },
+                os.path.join("checkpoint", dataset_name, f"{epoch}.pth"),
+            )
 
     print('done done')
 
@@ -362,8 +372,9 @@ if __name__ == '__main__':
     argparser.add_argument('--input_size', type=int, help='input size', default=256)
     argparser.add_argument('--epoch', type=int, help='epoch number', default=2)
     argparser.add_argument('--lr', type=float, help='learning rate', default=1e-3)
-    argparser.add_argument('--batch_size', type=int, help='mini batch size', default=2)
+    argparser.add_argument('--batch_size', type=int, help='mini batch size', default=4)
     argparser.add_argument("--lambda_ide", type=float, default=10)
+    argparser.add_argument("--lambda_cycle", type=float, default=5)
     argparser.add_argument("--identity", action="store_true")
     args = argparser.parse_args()
     main(args)
