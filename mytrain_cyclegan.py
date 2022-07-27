@@ -57,6 +57,8 @@ def train(args):
     device          = args.device
     learning_rate   = args.lr
 
+
+
     print('model_name = ', model_name)
     print('input_size = ', input_size)
     print('device = ', device)
@@ -304,7 +306,7 @@ def train(args):
                 # record loss for tensorboard
 
                 disp[state].record([loss_G, loss_GAN, loss_identity, loss_cycle, loss_D])
-                if step%10==0 :
+                if step%1==0 :
                     avg_losses = disp[state].get_avg_losses()
                     summary.add_scalar(f"loss_G_{state}", avg_losses[0], step)
                     summary.add_scalar(f"loss_G_G_GAN_{state}", avg_losses[1], step)
@@ -366,13 +368,13 @@ if __name__ == '__main__':
     argparser.add_argument('--checkpoint_path', default=f"checkpoint/apple2orange",
                     type=str, help='(default=%(default)s)')
 
-    argparser.add_argument('--device', default='cuda', type=str,
+    argparser.add_argument('--device', default='cpu', type=str,
                     choices=['cpu','cuda'],
                     help='(default=%(default)s)')
     argparser.add_argument('--input_size', type=int, help='input size', default=256)
     argparser.add_argument('--epoch', type=int, help='epoch number', default=2)
     argparser.add_argument('--lr', type=float, help='learning rate', default=1e-3)
-    argparser.add_argument('--batch_size', type=int, help='mini batch size', default=4)
+    argparser.add_argument('--batch_size', type=int, help='mini batch size', default=2)
     argparser.add_argument("--lambda_ide", type=float, default=10)
     argparser.add_argument("--lambda_cycle", type=float, default=5)
     argparser.add_argument("--identity", action="store_true")
