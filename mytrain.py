@@ -69,12 +69,12 @@ def train(args):
     mytype = 'A'
     train_path = os.path.join(base_path, 'train'+mytype)
     valid_path  = os.path.join(base_path, 'test'+mytype)
-    mydata_path = {'train' : train_path,
-                   'valid' : valid_path}
+    mydata_path = {'train': train_path,
+                   'valid': valid_path}
 
     # transform
     transform = {'train': give_me_transform('train'),
-                 'valid' : give_me_transform('valid')}
+                 'valid': give_me_transform('valid')}
 
     # dataloader
     dataloader = {'train': give_me_dataloader(SingleDataset(mydata_path['train'], transform['train']), batch_size),
@@ -92,7 +92,23 @@ def train(args):
     model_D_raw2rgb = mydisc_model('basic').to(device)
 
 
+    ## ckpt save load if any
+    if (args.checkpoint_path is not None) and \
+        (len(os.listdir(args.checkpoint_path) ) > 0) :
+        checkpoint = torch.load(args.checkpoint_path, map_location=device)
+        model_G_rgb2raw.load_state_dict(checkpoint["model_G_rgb2raw_state_dict"])
+        model_G_raw2rgb.load_state_dict(checkpoint["model_G_raw2rgb_state_dict"])
+        model_D_rgb2raw.load_state_dict(checkpoint["model_D_rgb2raw_state_dict"])
+        model_D_raw2rgb.load_state_dict(checkpoint["model_D_raw2rgb_state_dict"])
+        epoch = checkpoint["epoch"]
+    else:
+        os.makedirs(f"checkpoint/{dataset_name}", exist_ok=True)
+        epoch = 0
 
+    model_G_rgb2raw.train()
+    model_G_raw2rgb.train()
+    model_D_rgb2raw.train()
+    model_D_raw2rgb.train()
 
     # Loss
     criterion_bayer = BayerLoss()
@@ -125,14 +141,24 @@ def train(args):
 
     # Training
     # logger for tensorboard.
+    disp_train = LossDisplayer(["G_train",
+                                "G_GAN_train",
+                                "G_Identity_train",
+                                "G_Cycle_train",
+                                "D_train"])
+    disp_valid = LossDisplayer(["G_valid",
+                                "G_GAN_valid",
+                                "G_Identity_valid",
+                                "G_Cycle_valid",
+                                "D_valid"])
     logger = SummaryWriter()
-    os.makedirs(f"checkpoint/{dataset_name}", exist_ok=True)
-    epoch=0
     step = 0
     loss_G_RGB2Raw  = 0
     loss_D_RGB2Raw  = 0
     loss_G_Raw2RGB  = 0
     loss_D_Raw2RGB  = 0
+
+
     while epoch < args.epoch:
         epoch += 1
         print(f"\nEpoch {epoch}")
@@ -146,49 +172,51 @@ def train(args):
 
 
                 # degamma to make raw image
-                rgb_image = rgbimage.to(device)
-                degamma_image = degamma(rgbimage).to(device)
+                real_rgb     = rgbimage.to(device)
+                real_raw = degamma(rgbimage).to(device)
 
                 # Forward
-                fake_raw = model_G_rgb2raw(rgb_image)
-                fake_rgb = model_G_raw2rgb(degamma_image)
+                fake_raw = model_G_rgb2raw(real_rgb)
+                fake_rgb = model_G_raw2rgb(real_raw)
                 cycle_rgb = model_G_raw2rgb(fake_raw)
                 cycle_raw = model_G_rgb2raw(fake_rgb)
 
                 pred_fake_raw = model_D_rgb2raw(fake_raw)
-                pred_real_raw = model_D_rgb2raw(degamma_image)
                 pred_fake_rgb = model_D_raw2rgb(fake_rgb)
-                pred_real_rgb = model_D_raw2rgb(rgb_image)
+
 
                 # Calculate and backward generator model losses
-                loss_cycle_A = criterion_cycle(cycle_rgb, rgb_image)
-                loss_cycle_B = criterion_cycle(cycle_raw, degamma_image)
+                loss_cycle_A = criterion_cycle(cycle_rgb, real_rgb)
+                loss_cycle_B = criterion_cycle(cycle_raw, real_raw)
 
                 loss_GAN_raw = criterion_GAN(pred_fake_raw, torch.ones_like(pred_fake_raw))
                 loss_GAN_rgb = criterion_GAN(pred_fake_rgb, torch.ones_like(pred_fake_rgb))
 
                 loss_G = (
                     args.lambda_ide * (loss_cycle_A + loss_cycle_B)
-                    + loss_GAN_raw
-                    + loss_GAN_rgb
+                    + loss_GAN_raw + loss_GAN_rgb
                 )
 
                 if args.identity:
-                    identity_rgb = model_G_raw2rgb(rgb_image)
-                    identity_raw = model_G_rgb2raw(degamma_image)
-                    loss_identity_rgb = criterion_identity(identity_rgb, rgb_image)
-                    loss_identity_raw = criterion_identity(identity_raw, degamma_image)
+                    identity_rgb = model_G_raw2rgb(real_rgb)
+                    identity_raw = model_G_rgb2raw(real_raw)
+                    loss_identity_rgb = criterion_identity(identity_rgb, real_rgb)
+                    loss_identity_raw = criterion_identity(identity_raw, real_raw)
                     loss_G += 0.5 * args.lambda_ide * (loss_identity_rgb + loss_identity_raw)
 
 
 
 
                 # calculate loss
-                # loss_bayer = criterion_bayer(degamma_image, network_g_raw_output)
-                # loss_gan = criterion_GAN(degamma_image, fake_raw_output)
+                # loss_bayer = criterion_bayer(real_raw, network_g_raw_output)
+                # loss_gan = criterion_GAN(real_raw, fake_raw_output)
 
 
                 if state == 'train':
+                    # train mode
+
+
+
                     # Backward G
                     optim_G.zero_grad()
                     loss_G.backward()
@@ -196,21 +224,26 @@ def train(args):
                     loss_g_step = loss_G.item()
 
 
-
+                    # Calculate and backward discriminator model losses
                     # Backward D_raw
+                    pred_real_raw = model_D_rgb2raw(real_raw)
+
+
                     loss_D_raw = 0.5 * ( criterion_GAN(pred_real_raw, torch.ones_like(pred_real_raw))
                                        + criterion_GAN(pred_fake_raw, torch.zeros_like(pred_fake_raw)) )
 
                     optim_D_raw.zero_grad()
-                    loss_D_raw.backward()
+                    loss_D_raw.backward(retain_graph=True)
                     optim_D_raw.step()
 
                     # Backward D_rgb
+                    pred_real_rgb = model_D_rgb2raw(real_rgb)
+
                     loss_D_rgb = 0.5 * ( criterion_GAN(pred_real_rgb, torch.ones_like(pred_real_rgb))
                                        + criterion_GAN(pred_fake_rgb, torch.zeros_like(pred_fake_rgb)) )
 
                     optim_D_rgb.zero_grad()
-                    loss_D_rgb.backward()
+                    loss_D_rgb.backward(retain_graph=True)
                     optim_D_rgb.step()
 
 
@@ -225,9 +258,13 @@ def train(args):
                 #     pass
 
 
-                if step %1 == 0:
-                    logger.add_scalar('loss_G', loss_g_rgb2raw, step)
+                # if step %1 == 0:
+                #     logger.add_scalar('loss_G', loss_g_rgb2raw, step)
 
+        # Step scheduler
+        scheduler_G.step()
+        scheduler_D_rgb2raw.step()
+        scheduler_D_raw2rgb.step()
 
     print('done done')
 
@@ -251,6 +288,9 @@ if __name__ == '__main__':
     argparser.add_argument('--dataset_path', default=os.path.join('datasets'), type=str,
                     choices=['sidd','pixelshift', 'apple2orange'],
                     help='(default=%(default)s)')
+    argparser.add_argument('--checkpoint_path', default=f"checkpoint/apple2orange",
+                    type=str, help='(default=%(default)s)')
+
     argparser.add_argument('--device', default='cpu', type=str,
                     choices=['cpu','cuda'],
                     help='(default=%(default)s)')

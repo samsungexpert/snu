@@ -5,6 +5,7 @@ __pycache__/
 
 runs
 datasets
+checkpoint
 
 .DS_Store
 # C extensions

@@ -31,26 +31,27 @@ def mygen_model(model_name:str):
     return model
 
 
-def mydisc_model(model_name:str='basic'):
+def mydisc_model(model_name:str='basic', input_nc=3):
 
     if model_name not in ['basic', 'n_layers', 'pixel']:
         raise NotImplementedError('Discriminator model name [%s] is not recognized' % model_name)
 
-    model = networks.define_D(input_nc=(3+3), ndf=64, netD=model_name, n_layers_D=3)
+    # model = networks.define_D(input_nc=(3+3), ndf=64, netD=model_name, n_layers_D=3)
+    model = networks.define_D(input_nc=input_nc, ndf=64, netD=model_name, n_layers_D=3)
 
 
     return model
 
 
 def main():
-    model = mygen_model('bwunet')
+    # model = mygen_model('bwunet')
     # model = mygen_model('unet')
     # model =  mygen_model('resnet')
 
-    model =  mydisc_model('basic')
+    model =  mydisc_model('basic').to('cuda')
 
     print(model)
-    torchsummary.summary(model, input_size=(6, 128, 128))
+    torchsummary.summary(model, input_size=(3, 128, 128))
 
 
 if __name__ == '__main__':
