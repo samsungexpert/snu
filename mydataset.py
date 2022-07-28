@@ -44,24 +44,24 @@ def degamma(image, device, alpha=0.05):
     # print(image.shape, gamma.shape, offsets.shape)
     # gamma = torch.ones_like(image) * gamma
     # gammas = offsets * gamma
-    beta = np.array(2.2)
-    gammas = np.array([ 1+np.random.randn(1)*alpha, 1, 1+np.random.randn(1)*alpha]) * beta
+    beta = 2.2
+    gammas = 1 + np.random.randn(3,1)*alpha
+    gammas *= beta
+    gammas[1] = beta
+    # gammas = gammas * beta
+    gammas1 = np.copy(gammas)
     gammas = torch.from_numpy(gammas)
-    print('gammas.shape', gammas.shape)
-    exit()
-    # gammas = gammas.unsqueeze(0)
-    # gammas = gammas.unsqueeze(-1)
-    # gammas = gammas.unsqueeze(-1)
+    gammassss = torch.from_numpy(gammas1)
+    # print('gammas.shape', gammas.shape)
+    gammas = gammas.unsqueeze(0)
+    gammas = gammas.unsqueeze(-1)
     if device=='cuda':
         gammas=gammas.cuda()
 
-    image = (((image+1)/2)**(gammas))*2 - 1
     # print('image.shape', image.shape)
-    # print('gammas.shape', gammas.shape)
-    print('degamma gammas amin ', torch.min(gammas), '   amax ', torch.max(gammas))
-    print('degamma image  amin ', torch.min(image), '   amax ', torch.max(image))
+    # print('gammas.shape', gammas.shape, '\n', gammas)
+    image = (((image+1)/2)**(gammas))*2 - 1
 
-    image = image**gammas
     return image.float()
 
 
@@ -86,8 +86,9 @@ def give_me_visualization(model_rgb2raw, model_raw2rgb, device, test_batch=None,
     fake_images = torch.cat((fake_rgb_images,fake_raw_images ), dim=2)
     test_images = torch.cat((real_images.cpu(), fake_images.cpu()), dim=1)
 
-    return test_images.permute(1,2,0)
-    # return test_images
+    # if test_batch != None:
+    test_images = test_images.permute(1,2,0)
+    return test_images
 
 
 

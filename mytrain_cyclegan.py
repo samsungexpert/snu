@@ -1,6 +1,6 @@
 # https://www.kaggle.com/code/songseungwon/cyclegan-tutorial-from-scratch-monet-to-photo
 
-import os
+import os, shutil
 import time
 import argparse
 import torch
@@ -76,6 +76,12 @@ def train(args):
     print('device = ', device)
     print('dataset_name = ', dataset_name)
     print('dataset_path = ', dataset_path)
+
+    try:
+        shutil.rmtree('runs')
+        shutil.rmtree('checkpoint')
+    except:
+        pass
 
     # dataset
     base_path = os.path.join(dataset_path, dataset_name)
@@ -157,18 +163,14 @@ def train(args):
     # visualize test images
     test_batch = next( iter(dataloader['test']))
 
-    test_images = give_me_visualization(model_G_rgb2raw, model_G_raw2rgb, 'cpu')
-    # test_images = give_me_visualization(model_G_rgb2raw, model_G_raw2rgb, 'cpu', test_batch)
-    print('test_images.shape', test_images.shape)
-    # exit()
-    plt.imshow(test_images)
-    plt.show()
     summary = SummaryWriter()
-    summary.add_image('Generated_pairs', test_images, 1)
+    test_images = give_me_visualization(model_G_rgb2raw, model_G_raw2rgb, 'cpu', test_batch)
+    summary.add_image('Generated_pairs', test_images.permute(2,0,1), 0)
+    # plt.imshow(test_images)
+    # plt.show()
 
 
-
-
+    # make model in training mode
     model_G_rgb2raw.train()
     model_G_raw2rgb.train()
     model_D_rgb2raw.train()
@@ -214,15 +216,9 @@ def train(args):
                                 "G_Identity_valid",
                                 "G_Cycle_valid",
                                 "D_valid"])
-
     disp = {'train':disp_train, 'valid':disp_valid}
 
     step = 0
-    loss_G_RGB2Raw  = 0
-    loss_D_RGB2Raw  = 0
-    loss_G_Raw2RGB  = 0
-    loss_D_Raw2RGB  = 0
-
     loss_best_G = 1e10
 
     while epoch < args.epoch:
@@ -251,7 +247,7 @@ def train(args):
 
                 # degamma to make raw image
                 real_rgb     = rgbimage.to(device)
-                real_raw = degamma(rgbimage).to(device)
+                real_raw = degamma(rgbimage, device)
 
                 # -----------------
                 # Train Generators
@@ -358,9 +354,8 @@ def train(args):
                     disp[state].reset()
 
                     # log images
-                    test_images = give_me_visualization(model_G_rgb2raw, model_G_raw2rgb)
-                    # summary.add_image('Generated_pairs', step, test_images.permute(1,2,0))
-                    summary.add_image('Generated_pairs', test_images, step)
+                    test_images = give_me_visualization(model_G_rgb2raw, model_G_raw2rgb, device, test_batch)
+                    summary.add_image('Generated_pairs', test_images.permute(2,0,1), step)
 
 
         # Step scheduler
