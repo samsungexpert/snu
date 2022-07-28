@@ -84,14 +84,6 @@ class BayerLoss(nn.Module):
         return self.norm(targets_raw, inputs_raw)
 
 
-def degamma(image, alpha=0.05):
-    gamma = torch.tensor(np.array([2.2]))
-    offsets = torch.tensor([1-torch.abs(torch.randn(1)), 1, torch.abs(torch.randn(1))])
-    gammas = offsets * gamma
-    image = image.permute(0,2,3,1)
-    image = (((image+1)/2)**(gammas))*2 - 1
-    image = image.permute(0,3,1,2)
-    return image.float()
 
 
 
@@ -100,7 +92,7 @@ def degamma(image, alpha=0.05):
 
 
 if __name__ == '__main__':
-
+    pass
     # # print(idx_R.shape)
     # # print(idx_RGB.shape)
 
@@ -135,10 +127,4 @@ if __name__ == '__main__':
     # print(abs(torch.mean((img1-img2)**2)))
 
 
-
-    image = torch.ones((2, 3, 2, 2))*.9
-    print(image.shape)
-    image_degamma = degamma(image)
-    print(image_degamma.shape)
-    print(image_degamma)
 

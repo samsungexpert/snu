@@ -8,6 +8,7 @@ import torchvision
 import numpy as np
 from tqdm import tqdm
 from torch import nn, optim
+
 from options.train_options import TrainOptions
 from data import create_dataset
 from models import create_model
@@ -17,8 +18,8 @@ from myutils import init_weight, ImagePool, LossDisplayer
 # from argument import get_args
 from torch.utils.tensorboard import SummaryWriter
 
-from mydataset import give_me_dataloader, SingleDataset, give_me_transform
-from myloss import BayerLoss, degamma
+from mydataset import * #give_me_dataloader, SingleDataset, give_me_transform, give_me_test_images, give_me_comparison, degamma
+from myloss import BayerLoss
 import matplotlib.pyplot as plt
 
 
@@ -42,11 +43,16 @@ def degamma_visualization(rgbimage):
     plt.title('rgb3 - after degamma')
     plt.show()
 
+def identity(x):
+    return x
 
 
 def train(args):
-    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    print('train with', device)
+    # device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    dev = "cuda" if torch.cuda.is_available() else "cpu"
+    # dev = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    print('dev=', dev)
+
     print(args)
     # args
     model_name      = args.model_name
@@ -55,8 +61,14 @@ def train(args):
     input_size      = args.input_size
     batch_size      = args.batch_size
     device          = args.device
-    learning_rate   = args.lr
-
+    if dev == 'cpu':
+        device = torch.device('cpu')
+    else:
+        if device == 'cpu':
+            device = torch.device('cpu')
+        else:
+            device = torch.device('cuda')
+            print('hello cuda')
 
 
     print('model_name = ', model_name)
@@ -73,16 +85,24 @@ def train(args):
     mytype = 'A'
     train_path = os.path.join(base_path, 'train'+mytype)
     valid_path  = os.path.join(base_path, 'test'+mytype)
+    test_path = os.path.join('imgs', dataset_name)
     mydata_path = {'train': train_path,
-                   'valid': valid_path}
+                   'valid': valid_path,
+                   'test' : test_path}
+
 
     # transform
     transform = {'train': give_me_transform('train'),
-                 'valid': give_me_transform('valid')}
+                 'valid': give_me_transform('valid'),
+                 'test': give_me_transform('test')}
 
     # dataloader
+
+
     dataloader = {'train': give_me_dataloader(SingleDataset(mydata_path['train'], transform['train']), batch_size),
-                  'valid': give_me_dataloader(SingleDataset(mydata_path['valid'], transform['valid']),  batch_size) }
+                  'valid': give_me_dataloader(SingleDataset(mydata_path['valid'], transform['valid']), batch_size),
+                  'test' : give_me_dataloader(SingleDataset(mydata_path['test'],  transform['test']),  batch_size=2) }
+
 
     nsteps={}
     for state in ['train', 'valid']:
@@ -108,7 +128,6 @@ def train(args):
         print('ckpt name = ', ckpt_name)
         checkpoint = torch.load(ckpt_name, map_location=device)
 
-
         model_G_rgb2raw.load_state_dict(checkpoint["model_G_rgb2raw"])
         model_G_raw2rgb.load_state_dict(checkpoint["model_G_raw2rgb"])
         model_D_rgb2raw.load_state_dict(checkpoint["model_D_rgb2raw"])
@@ -120,8 +139,6 @@ def train(args):
             fname = os.path.join(ckpt_path_name, f"{epoch}.pth")
             if os.path.exists(fname):
                 fname = fname.split('.pth')[0] + '_1.pth'
-
-
             torch.save(
                     {
                         "model_G_rgb2raw": model_G_rgb2raw.state_dict(),
@@ -134,6 +151,21 @@ def train(args):
             )
         except:
             print('skip')
+
+
+
+    # visualize test images
+    test_batch = next( iter(dataloader['test']))
+
+    test_images = give_me_visualization(model_G_rgb2raw, model_G_raw2rgb, 'cpu')
+    # test_images = give_me_visualization(model_G_rgb2raw, model_G_raw2rgb, 'cpu', test_batch)
+    print('test_images.shape', test_images.shape)
+    # exit()
+    plt.imshow(test_images)
+    plt.show()
+    summary = SummaryWriter()
+    summary.add_image('Generated_pairs', test_images, 1)
+
 
 
 
@@ -184,7 +216,7 @@ def train(args):
                                 "D_valid"])
 
     disp = {'train':disp_train, 'valid':disp_valid}
-    summary = SummaryWriter()
+
     step = 0
     loss_G_RGB2Raw  = 0
     loss_D_RGB2Raw  = 0
@@ -303,16 +335,18 @@ def train(args):
                         summary.add_scalar(f"loss_best_G{state}", loss_best_G, step)
 
 
-                # record loss for tensorboard
 
+                # -----------------
+                # record loss for tensorboard
+                # -----------------
                 disp[state].record([loss_G, loss_GAN, loss_identity, loss_cycle, loss_D])
                 if step%1==0 :
                     avg_losses = disp[state].get_avg_losses()
-                    summary.add_scalar(f"loss_G_{state}", avg_losses[0], step)
-                    summary.add_scalar(f"loss_G_G_GAN_{state}", avg_losses[1], step)
-                    summary.add_scalar(f"loss_G_Identity_{state}", avg_losses[2], step)
-                    summary.add_scalar(f"loss_G_Cycle_{state}", avg_losses[3], step)
-                    summary.add_scalar(f"loss_D_{state}", avg_losses[4], step)
+                    summary.add_scalar(f"loss_G_{state}",           avg_losses[0], step)
+                    summary.add_scalar(f"loss_G_G_GAN_{state}",     avg_losses[1], step)
+                    summary.add_scalar(f"loss_G_Identity_{state}",  avg_losses[2], step)
+                    summary.add_scalar(f"loss_G_Cycle_{state}",     avg_losses[3], step)
+                    summary.add_scalar(f"loss_D_{state}",           avg_losses[4], step)
 
                     print(f'{state} : epoch{epoch}, step{step}------------------------------------------------------')
                     print('loss_G:          \t', avg_losses[0])
@@ -322,6 +356,11 @@ def train(args):
                     print('loss_D:          \t', avg_losses[4])
 
                     disp[state].reset()
+
+                    # log images
+                    test_images = give_me_visualization(model_G_rgb2raw, model_G_raw2rgb)
+                    # summary.add_image('Generated_pairs', step, test_images.permute(1,2,0))
+                    summary.add_image('Generated_pairs', test_images, step)
 
 
         # Step scheduler
@@ -340,7 +379,7 @@ def train(args):
                     "model_D_raw2rgb": model_D_raw2rgb.state_dict(),
                     "epoch": epoch,
                 },
-                os.path.join("checkpoint", dataset_name, f"{epoch}.pth"),
+                os.path.join("checkpoint", dataset_name, "cycle_gan_%05d.pth"%epoch),
             )
 
     print('done done')
@@ -368,7 +407,7 @@ if __name__ == '__main__':
     argparser.add_argument('--checkpoint_path', default=f"checkpoint/apple2orange",
                     type=str, help='(default=%(default)s)')
 
-    argparser.add_argument('--device', default='cpu', type=str,
+    argparser.add_argument('--device', default='cuda', type=str,
                     choices=['cpu','cuda'],
                     help='(default=%(default)s)')
     argparser.add_argument('--input_size', type=int, help='input size', default=256)
