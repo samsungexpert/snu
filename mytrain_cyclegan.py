@@ -248,6 +248,10 @@ def train(args):
                 # degamma to make raw image
                 real_rgb     = rgbimage.to(device)
                 real_raw = degamma(rgbimage, device)
+                real_raw = real_raw.to(device)
+                # if device == 'cuda':
+                #     real_rgb = real_rgb.cuda()
+                #     real_raw = real_raw.cuda()
 
                 # -----------------
                 # Train Generators
@@ -270,6 +274,8 @@ def train(args):
                 # Cycle Loss
                 cycle_rgb = model_G_raw2rgb(fake_raw)
                 cycle_raw = model_G_rgb2raw(fake_rgb)
+                cycle_rgb = cycle_rgb.to(device)
+                cycle_raw = cycle_raw.to(device)
 
                 loss_cycle_rgb = criterion_cycle(cycle_rgb, real_rgb)
                 loss_cycle_raw = criterion_cycle(cycle_raw, real_raw)
@@ -281,6 +287,9 @@ def train(args):
                 if True: #args.identity:
                     identity_rgb = model_G_raw2rgb(real_rgb)
                     identity_raw = model_G_rgb2raw(real_raw)
+                    identity_rgb = identity_rgb.to(device)
+                    identity_raw = identity_raw.to(device)
+
                     loss_identity_rgb = criterion_identity(identity_rgb, real_rgb)
                     loss_identity_raw = criterion_identity(identity_raw, real_raw)
                     loss_identity = (loss_identity_rgb + loss_identity_raw) / 2
@@ -336,7 +345,7 @@ def train(args):
                 # record loss for tensorboard
                 # -----------------
                 disp[state].record([loss_G, loss_GAN, loss_identity, loss_cycle, loss_D])
-                if step%1==0 :
+                if step%20==0 :
                     avg_losses = disp[state].get_avg_losses()
                     summary.add_scalar(f"loss_G_{state}",           avg_losses[0], step)
                     summary.add_scalar(f"loss_G_G_GAN_{state}",     avg_losses[1], step)
@@ -378,9 +387,6 @@ def train(args):
             )
 
     print('done done')
-
-
-
 
 
 
