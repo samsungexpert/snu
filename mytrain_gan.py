@@ -60,22 +60,24 @@ def train(args):
 
     # path
     mytype = 'A'
+    mytype = 'C'
     train_path = os.path.join(base_path, 'train'+mytype)
     valid_path  = os.path.join(base_path, 'test'+mytype)
     test_path = os.path.join('imgs', dataset_name)
+
     mydata_path = {'train': train_path,
                    'valid': valid_path,
                    'test' : test_path}
-
-
+    print(mydata_path)
+    print('train_path: ', train_path)
+    print('valid_path: ', valid_path)
+    print('test_path: ', test_path)
     # transform
     transform = {'train': give_me_transform('train'),
                  'valid': give_me_transform('valid'),
                  'test': give_me_transform('test')}
 
     # dataloader
-
-
     dataloader = {'train': give_me_dataloader(SingleDataset(mydata_path['train'], transform['train']), batch_size),
                   'valid': give_me_dataloader(SingleDataset(mydata_path['valid'], transform['valid']), batch_size),
                   'test' : give_me_dataloader(SingleDataset(mydata_path['test'],  transform['test']),  batch_size=2) }
@@ -84,10 +86,10 @@ def train(args):
     nsteps={}
     for state in ['train', 'valid']:
         nsteps[state] = len(dataloader[state])
-        print('len(%s): '%state, len(dataloader[state]))
+        print( '%s len(%s): ' % (state , len(dataloader[state]) ))
 
     # model
-    model_G_rgb2raw = mygen_model('bwunet').to(device)
+    model_G_rgb2raw = mygen_model(model_name).to(device)
     model_D_raw     = mydisc_model('basic', input_nc=6).to(device)
 
 
@@ -95,6 +97,7 @@ def train(args):
     ckpt_path_name = f'checkpoint/gan/{dataset_name}'
     # ckpt_path_name = f"checkpoint/{dataset_name}"
     os.makedirs(ckpt_path_name, exist_ok=True)
+
     ckpt_list = os.listdir(ckpt_path_name)
     if (ckpt_path_name is not None) and \
         (len(ckpt_list) > 0) :
@@ -141,6 +144,7 @@ def train(args):
     test_batch = next( iter(dataloader['test']))
 
     summary = SummaryWriter()
+    os.makedirs('runs', exist_ok=True)
     test_images = give_me_visualization(model_G_rgb2raw, None, 'cpu', test_batch)
     summary.add_image('Generated_pairs', test_images.permute(2,0,1), 0)
     # plt.imshow(test_images)
@@ -157,6 +161,7 @@ def train(args):
     criterion_bayer = BayerLoss()
     criterion_cycle = nn.L1Loss()
     criterion_identity = nn.L1Loss()
+    criterion_generation = nn.L1Loss()
     criterion_GAN = nn.MSELoss() #  vanilla: nn.BCEWithLogitsLoss(), lsgan: nn.MseLoss()
 
     # Optimizer, Schedular
@@ -239,10 +244,10 @@ def train(args):
                 loss_G = 0
 
                 # Generation Loss
-                generation_rgb = model_G_rgb2raw(real_rgb)
+                generation_raw = model_G_rgb2raw(real_rgb)
 
-                loss_generation_rgb = criterion_identity(generation_rgb, real_raw)
-                loss_generation = loss_generation_rgb
+                loss_generation_raw = criterion_generation(generation_raw, real_raw)
+                loss_generation = loss_generation_raw
 
                 loss_G += args.lambda_generation *  loss_generation
 
@@ -313,7 +318,7 @@ def train(args):
                 # record loss for tensorboard
                 # -----------------
                 disp[state].record([loss_G, loss_GAN, loss_generation, loss_D])
-                if step%20==0 :
+                if step%100==0 :
                     avg_losses = disp[state].get_avg_losses()
                     summary.add_scalar(f"loss_G_{state}",           avg_losses[0], step)
                     summary.add_scalar(f"loss_G_G_GAN_{state}",     avg_losses[1], step)
@@ -321,10 +326,10 @@ def train(args):
                     summary.add_scalar(f"loss_D{state}",     avg_losses[3], step)
 
                     print(f'{state} : epoch{epoch}, step{step}------------------------------------------------------')
-                    print('loss_G:          \t', avg_losses[0])
-                    print('loss_G_G_GAN:    \t', avg_losses[1])
-                    print('loss_G_Generation_: \t', avg_losses[2])
-                    print('loss_D:          \t', avg_losses[3])
+                    print('loss_G: %.3f, ' % avg_losses[0], end='')
+                    print('loss_G_G_GAN: %.3f, ' % avg_losses[1], end='')
+                    print('loss_G_Generation: %.3f, ' % avg_losses[2], end='')
+                    print('loss_D: %.3f' % avg_losses[3])
 
                     disp[state].reset()
 
@@ -343,7 +348,7 @@ def train(args):
             torch.save(
                 {
                     "model_G_rgb2raw": model_G_rgb2raw.state_dict(),
-                    "model_D_raw2rgb": model_D_raw.state_dict(),
+                    "model_D_raw":     model_D_raw.state_dict(),
                     "epoch": epoch,
                 },
                 os.path.join(ckpt_path_name, "gan_%05d.pth"%epoch),
@@ -360,7 +365,7 @@ def main(args):
 if __name__ == '__main__':
     argparser = argparse.ArgumentParser()
 
-    argparser.add_argument('--model_name', default='bwunet', type=str,
+    argparser.add_argument('--model_name', default='resnet', type=str,
                     choices=['resnet', 'unet', 'bwunet'],
                     help='(default=%(default)s)')
     argparser.add_argument('--dataset_name', default='apple2orange', type=str,

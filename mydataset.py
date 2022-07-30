@@ -20,7 +20,7 @@ def give_me_test_images(input_size=256):
 
 
 def give_me_comparison(model, inputs, device):
-    print('inputs.size ', inputs.size(), type(inputs))
+    # print('inputs.size ', inputs.size(), type(inputs))
     with torch.no_grad():
         model.eval()
         if device == torch.device('cuda'):
@@ -93,7 +93,7 @@ def degamma(image, device, alpha=0.05):
 
 def give_me_visualization(model_rgb2raw, model_raw2rgb=None, device='cpu', test_batch=None, nomalize=True):
     # visualize test images
-    print('test_batch', type(test_batch))
+    # print('test_batch', type(test_batch))
     if test_batch != None:
         real_rgb_images = test_batch.cpu()
     else:
@@ -104,10 +104,10 @@ def give_me_visualization(model_rgb2raw, model_raw2rgb=None, device='cpu', test_
     else:
         fake_rgb_images = give_me_comparison(model_raw2rgb, real_raw_images.to(device), device=device)
     fake_raw_images = give_me_comparison(model_rgb2raw, real_rgb_images.to(device), device=device)
-    print('real_rgb ', torch.amin(real_rgb_images), torch.amax(real_rgb_images))
-    print('real_raw ', torch.amin(real_raw_images), torch.amax(real_raw_images))
-    print('fake_rgb ', torch.amin(fake_rgb_images), torch.amax(fake_rgb_images))
-    print('fake_raw ', torch.amin(fake_raw_images), torch.amax(fake_raw_images))
+    print('real_rgb (%.3f, %.3f), ' %(torch.amin(real_rgb_images), torch.amax(real_rgb_images)), end='')
+    print('real_raw (%.3f, %.3f), ' %(torch.amin(real_raw_images), torch.amax(real_raw_images)), end='')
+    print('fake_rgb (%.3f, %.3f), ' %(torch.amin(fake_rgb_images), torch.amax(fake_rgb_images)), end='')
+    print('fake_raw (%.3f, %.3f), ' %(torch.amin(fake_raw_images), torch.amax(fake_raw_images)))
 
     real_rgb_images = vutils.make_grid(real_rgb_images, padding=2, normalize=nomalize)
     real_raw_images = vutils.make_grid(real_raw_images, padding=2, normalize=nomalize)
