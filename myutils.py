@@ -1,7 +1,8 @@
 import random
 import torch
 from torch import nn
-from torch.nn import Module
+import matplotlib.pyplot as plt
+
 
 class ImagePool():
     """This class implements an image buffer that stores previously generated images.
@@ -82,6 +83,28 @@ def init_weight(net):
             m.weight.data.normal_(0, 0.02)
             if m.bias is not None:
                 m.bias.data.zero_()
+
+
+def degamma_visualization(rgbimage):
+    rgb1 = rgbimage[0]
+    rgb1 = rgb1.permute(1,2,0)
+    rgb2 = (((rgb1+1)/2)**(2.2))*2 - 1
+    rgb3 = (((rgb1+1)/2)**(0.45))*2 - 1
+
+
+    plt.subplot(1, 3, 1)
+    plt.imshow(rgb1)
+    plt.title('rgb1 - before gamma')
+
+    plt.subplot(1, 3, 2)
+    plt.imshow(rgb2)
+    plt.title('rgb2 - after gamma')
+
+    plt.subplot(1, 3, 3)
+    plt.imshow(rgb3)
+    plt.title('rgb3 - after degamma')
+    plt.show()
+
 
 if __name__ == '__main__':
     print()

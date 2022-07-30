@@ -13,7 +13,7 @@ from options.train_options import TrainOptions
 from data import create_dataset
 from models import create_model
 # from util.visualizer import Visualizer
-from mymodel import mygen_model, mydisc_model
+from mymodel import mygen_model, mydisc_model, set_requires_grad
 from myutils import init_weight, ImagePool, LossDisplayer
 # from argument import get_args
 from torch.utils.tensorboard import SummaryWriter
@@ -116,10 +116,12 @@ def train(args):
         print('len(%s): '%state, len(dataloader[state]))
 
     # model
-    model_G_rgb2raw = mygen_model('resnet').to(device)
-    model_G_raw2rgb = mygen_model('resnet').to(device)
-    model_D_rgb2raw = mydisc_model('basic').to(device)
-    model_D_raw2rgb = mydisc_model('basic').to(device)
+    # model_G_rgb2raw = mygen_model('resnet').to(device)
+    # model_G_raw2rgb = mygen_model('resnet').to(device)
+    model_G_rgb2raw = mygen_model('bwunet').to(device)
+    model_G_raw2rgb = mygen_model('bwunet').to(device)
+    model_D_rgb     = mydisc_model('basic').to(device)
+    model_D_raw     = mydisc_model('basic').to(device)
 
 
     ## ckpt save load if any
@@ -136,8 +138,8 @@ def train(args):
 
         model_G_rgb2raw.load_state_dict(checkpoint["model_G_rgb2raw"])
         model_G_raw2rgb.load_state_dict(checkpoint["model_G_raw2rgb"])
-        model_D_rgb2raw.load_state_dict(checkpoint["model_D_rgb2raw"])
-        model_D_raw2rgb.load_state_dict(checkpoint["model_D_raw2rgb"])
+        model_D_rgb.load_state_dict(checkpoint["model_D_rgb"])
+        model_D_raw.load_state_dict(checkpoint["model_D_raw"])
         epoch = checkpoint["epoch"]
     else:
         epoch = 0
@@ -149,8 +151,8 @@ def train(args):
                     {
                         "model_G_rgb2raw": model_G_rgb2raw.state_dict(),
                         "model_G_raw2rgb": model_G_raw2rgb.state_dict(),
-                        "model_D_rgb2raw": model_D_rgb2raw.state_dict(),
-                        "model_D_raw2rgb": model_D_raw2rgb.state_dict(),
+                        "model_D_rgb": model_D_rgb.state_dict(),
+                        "model_D_raw": model_D_raw.state_dict(),
                         "epoch": epoch,
                     },
                     fname,
@@ -168,13 +170,14 @@ def train(args):
     summary.add_image('Generated_pairs', test_images.permute(2,0,1), 0)
     # plt.imshow(test_images)
     # plt.show()
+    # exit()
 
 
     # make model in training mode
     model_G_rgb2raw.train()
     model_G_raw2rgb.train()
-    model_D_rgb2raw.train()
-    model_D_raw2rgb.train()
+    model_D_rgb.train()
+    model_D_raw.train()
 
     # Loss
     criterion_bayer = BayerLoss()
@@ -191,8 +194,8 @@ def train(args):
         betas=(0.5, 0.999),
     )
 
-    optim_D_raw = optim.Adam(model_D_rgb2raw.parameters(), lr=args.lr)
-    optim_D_rgb = optim.Adam(model_D_raw2rgb.parameters(), lr=args.lr)
+    optim_D_raw = optim.Adam(model_D_rgb.parameters(), lr=args.lr)
+    optim_D_rgb = optim.Adam(model_D_raw.parameters(), lr=args.lr)
 
     lr_lambda = lambda epoch: 1 - ((epoch - 1) // 100) / (args.epoch / 100)
     scheduler_G = optim.lr_scheduler.LambdaLR(optimizer=optim_G, lr_lambda=lr_lambda)
@@ -232,101 +235,122 @@ def train(args):
             for idx, rgbimage in enumerate(pbar):
                 pbar.set_description('Processing %s...  epoch %d' % (state, epoch))
 
-
-
-                if state == 'train':
+                if state == 'train' and idx == 0:
                     # train mode
                     model_G_rgb2raw.train()
                     model_G_raw2rgb.train()
                     optim_G.zero_grad()
-                else:
+                elif state == 'valid' and idx == 0:
                     # eval mode
                     model_G_rgb2raw.eval()
                     model_G_raw2rgb.eval()
 
 
                 # degamma to make raw image
-                real_rgb     = rgbimage.to(device)
-                real_raw = degamma(rgbimage, device)
-                real_raw = real_raw.to(device)
-                # if device == 'cuda':
-                #     real_rgb = real_rgb.cuda()
-                #     real_raw = real_raw.cuda()
+                real_rgb = rgbimage.to(device)
+                real_raw = degamma(rgbimage, device).to(device)
+
 
                 # -----------------
                 # Train Generators
                 # -----------------
-                loss_G = 0
 
 
-                # GAN Loss
+
+                #### Forward
                 fake_raw = model_G_rgb2raw(real_rgb)
                 fake_rgb = model_G_raw2rgb(real_raw)
-                pred_fake_raw = model_D_rgb2raw(fake_raw)
-                pred_fake_rgb = model_D_raw2rgb(fake_rgb)
+                rec_rgb = model_G_raw2rgb(fake_raw)
+                rec_raw = model_G_rgb2raw(fake_rgb)
+                # rec_rgb = rec_rgb.to(device)
+                # rec_raw = rec_raw.to(device)
 
-                loss_GAN_raw = criterion_GAN(pred_fake_raw, torch.ones_like(pred_fake_raw))
-                loss_GAN_rgb = criterion_GAN(pred_fake_rgb, torch.ones_like(pred_fake_rgb))
 
-                loss_GAN = (loss_GAN_raw  + loss_GAN_rgb) / 2
-                loss_G += loss_GAN
+                ## freeze D when training Generators
+                set_requires_grad([model_D_rgb, model_D_raw], False)
 
-                # Cycle Loss
-                cycle_rgb = model_G_raw2rgb(fake_raw)
-                cycle_raw = model_G_rgb2raw(fake_rgb)
-                cycle_rgb = cycle_rgb.to(device)
-                cycle_raw = cycle_raw.to(device)
 
-                loss_cycle_rgb = criterion_cycle(cycle_rgb, real_rgb)
-                loss_cycle_raw = criterion_cycle(cycle_raw, real_raw)
-                loss_cycle = (loss_cycle_rgb + loss_cycle_raw) / 2
-                loss_G += args.lambda_cycle * loss_cycle
+                if state == 'train':
+                    optim_G.zero_grad()
 
+
+                loss_G = 0
 
                 # Identity Loss
                 if True: #args.identity:
-                    identity_rgb = model_G_raw2rgb(real_rgb)
-                    identity_raw = model_G_rgb2raw(real_raw)
-                    identity_rgb = identity_rgb.to(device)
-                    identity_raw = identity_raw.to(device)
+                    identity_raw = model_G_raw2rgb(real_rgb)
+                    identity_rgb = model_G_rgb2raw(real_raw)
 
-                    loss_identity_rgb = criterion_identity(identity_rgb, real_rgb)
-                    loss_identity_raw = criterion_identity(identity_raw, real_raw)
-                    loss_identity = (loss_identity_rgb + loss_identity_raw) / 2
+                    loss_identity_rgb = criterion_identity(identity_rgb, real_raw)
+                    loss_identity_raw = criterion_identity(identity_raw, real_rgb)
+                    loss_identity = 0.5 * (loss_identity_rgb + loss_identity_raw)
 
                     loss_G += args.lambda_ide *  loss_identity
 
-                loss_g_step = loss_G.item()
+
+                # GAN loss
+                pred_fake_raw = model_D_raw(fake_raw)
+                pred_fake_rgb = model_D_rgb(fake_rgb)
+
+                loss_GAN_raw  = criterion_GAN(pred_fake_raw, torch.ones_like(pred_fake_raw))
+                loss_GAN_rgb  = criterion_GAN(pred_fake_rgb, torch.ones_like(pred_fake_rgb))
+                loss_GAN = 0.5 * ( loss_GAN_raw + loss_GAN_rgb )
+
+                loss_G += loss_GAN
+
+                # Cycle Loss
+                loss_cycle_rgb = criterion_cycle(rec_rgb, real_rgb)
+                loss_cycle_raw = criterion_cycle(real_raw, real_raw)
+                loss_cycle = 0.5 * (loss_cycle_rgb + loss_cycle_raw)
+                loss_G += args.lambda_cycle * loss_cycle
+
+
                 if state == 'train':
                     loss_G.backward()
                     optim_G.step()
 
+
+
                 # -----------------
-                # Train Discriminator Raw
+                # Discriminator Setup
                 # -----------------
                 if state == 'train':
                     optim_D_raw.zero_grad()
                     optim_D_rgb.zero_grad()
+                    require_grad_for_D = True
+                else:
+                    require_grad_for_D = False
 
-                pred_real_raw = model_D_rgb2raw(real_raw)
-                pred_fake_raw = model_D_rgb2raw(fake_raw.detach())
+                 ## freeze D when training Generators
+                set_requires_grad([model_D_rgb, model_D_raw], require_grad_for_D)
 
-                loss_D_raw = 0.5 * (   criterion_GAN(pred_real_raw, torch.ones_like(pred_fake_raw))
-                                     + criterion_GAN(pred_fake_raw, torch.zeros_like(pred_fake_raw)))
+
+
+                # -----------------
+                # Train Discriminator Raw
+                # -----------------
+                pred_real_raw = model_D_raw(real_raw)
+                pred_fake_raw = model_D_raw(fake_raw.detach())
+
+                loss_D_raw_real = criterion_GAN(pred_real_raw, torch.ones_like( pred_real_raw))
+                loss_D_raw_fake = criterion_GAN(pred_fake_raw, torch.zeros_like(pred_fake_raw))
+                loss_D_raw = 0.5 * ( loss_D_raw_real + loss_D_raw_fake )
 
 
                 # -----------------
                 # Train Discriminator RGB
                 # -----------------
-                pred_real_rgb = model_D_rgb2raw(real_rgb)
-                pred_fake_rgb = model_D_rgb2raw(fake_rgb.detach())
+                pred_real_rgb = model_D_rgb(real_rgb)
+                pred_fake_rgb = model_D_rgb(fake_rgb.detach())
 
 
-                loss_D_rgb = 0.5 * (   criterion_GAN(pred_real_rgb, torch.ones_like(pred_fake_raw))
-                                     + criterion_GAN(pred_fake_rgb, torch.zeros_like(pred_fake_raw)) )
+                loss_D_rgb_real = criterion_GAN(pred_real_rgb, torch.ones_like( pred_real_rgb))
+                loss_D_rgb_fake = criterion_GAN(pred_fake_rgb, torch.zeros_like(pred_fake_rgb))
+                loss_D_rgb = 0.5 * ( loss_D_rgb_real + loss_D_rgb_fake )
+
+                loss_D = 0.5 * (loss_D_raw + loss_D_rgb)
 
 
-                loss_D = (loss_D_raw + loss_D_rgb)/2
 
                 # backward for discriminator
                 if state == 'train':
@@ -379,12 +403,13 @@ def train(args):
                 {
                     "model_G_rgb2raw": model_G_rgb2raw.state_dict(),
                     "model_G_raw2rgb": model_G_raw2rgb.state_dict(),
-                    "model_D_rgb2raw": model_D_rgb2raw.state_dict(),
-                    "model_D_raw2rgb": model_D_raw2rgb.state_dict(),
+                    "model_D_rgb2raw": model_D_rgb.state_dict(),
+                    "model_D_raw2rgb": model_D_raw.state_dict(),
                     "epoch": epoch,
                 },
                 os.path.join("checkpoint", dataset_name, "cycle_gan_%05d.pth"%epoch),
             )
+
 
     print('done done')
 
