@@ -47,12 +47,12 @@ def train(args):
     print('dataset_name = ', dataset_name)
     print('dataset_path = ', dataset_path)
 
-    try:
-        shutil.rmtree('runs/gan')
-        shutil.rmtree('checkpoint/gan')
-        shutil.rmtree('runs')
-    except:
-        pass
+    # try:
+    #     shutil.rmtree('runs/gan')
+    #     shutil.rmtree('checkpoint/gan')
+    #     shutil.rmtree('runs')
+    # except:
+    #     pass
 
     # dataset
     base_path = os.path.join(dataset_path, dataset_name)
@@ -95,6 +95,7 @@ def train(args):
 
     ## ckpt save load if any
     ckpt_path_name = f'checkpoint/gan/{dataset_name}'
+    ckpt_path_name = os.path.join(ckpt_path_name, model_name)
     # ckpt_path_name = f"checkpoint/{dataset_name}"
     os.makedirs(ckpt_path_name, exist_ok=True)
 
@@ -132,8 +133,8 @@ def train(args):
     dummy_input_G = torch.randn(1, 3, 256, 256, device=device)
     dummy_input_D = torch.randn(1, 6, 256, 256, device=device)
 
-    torch.onnx.export(model_G_rgb2raw.eval(), dummy_input_G, "G_gan.onnx")
-    torch.onnx.export(model_D_raw.eval(), dummy_input_D,     "D_gan.onnx")
+    torch.onnx.export(model_G_rgb2raw.eval(), dummy_input_G, "G_%s_gan.onnx"%model_name)
+    torch.onnx.export(model_D_raw.eval(), dummy_input_D,     "D_%s_gan.onnx"%model_name)
 
 
 
@@ -143,8 +144,9 @@ def train(args):
     # visualize test images
     test_batch = next( iter(dataloader['test']))
 
-    summary = SummaryWriter()
-    os.makedirs('runs', exist_ok=True)
+    logpath = os.path.join('runs', model_name)
+    os.makedirs(logpath, exist_ok=True)
+    summary = SummaryWriter(logpath)
     test_images = give_me_visualization(model_G_rgb2raw, None, 'cpu', test_batch)
     summary.add_image('Generated_pairs', test_images.permute(2,0,1), 0)
     # plt.imshow(test_images)
@@ -161,7 +163,7 @@ def train(args):
     criterion_bayer = BayerLoss()
     criterion_cycle = nn.L1Loss()
     criterion_identity = nn.L1Loss()
-    criterion_generation = nn.L1Loss()
+    criterion_generation = nn.MSELoss()
     criterion_GAN = nn.MSELoss() #  vanilla: nn.BCEWithLogitsLoss(), lsgan: nn.MseLoss()
 
     # Optimizer, Schedular
