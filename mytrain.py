@@ -286,11 +286,9 @@ if __name__ == '__main__':
                     choices=['sidd','pixelshift', 'apple2orange'],
                     help='(default=%(default)s)')
     argparser.add_argument('--dataset_path', default=os.path.join('datasets'), type=str,
-                    choices=['sidd','pixelshift', 'apple2orange'],
-                    help='(default=%(default)s)')
+                    help='(default=datasets)')
     argparser.add_argument('--checkpoint_path', default=f"checkpoint/apple2orange",
                     type=str, help='(default=%(default)s)')
-
     argparser.add_argument('--device', default='cpu', type=str,
                     choices=['cpu','cuda'],
                     help='(default=%(default)s)')

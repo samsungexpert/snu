@@ -26,6 +26,8 @@ def train(args):
     print(args)
     # args
     model_name      = args.model_name
+    model_sig       = args.model_sig
+    model_type      = args.model_type
     dataset_name    = args.dataset_name
     dataset_path    = args.dataset_path
     input_size      = args.input_size
@@ -42,6 +44,7 @@ def train(args):
 
 
     print('model_name = ', model_name)
+    print('model_sig = ', model_sig)
     print('input_size = ', input_size)
     print('device = ', device)
     print('dataset_name = ', dataset_name)
@@ -94,8 +97,8 @@ def train(args):
 
 
     ## ckpt save load if any
-    ckpt_path_name = f'checkpoint/gan/{dataset_name}'
-    ckpt_path_name = os.path.join(ckpt_path_name, model_name)
+    ckpt_path_name = f'checkpoint/{model_type}/{dataset_name}'
+    ckpt_path_name = os.path.join(ckpt_path_name, model_name+model_sig)
     # ckpt_path_name = f"checkpoint/{dataset_name}"
     os.makedirs(ckpt_path_name, exist_ok=True)
 
@@ -133,8 +136,8 @@ def train(args):
     dummy_input_G = torch.randn(1, 3, 256, 256, device=device)
     dummy_input_D = torch.randn(1, 6, 256, 256, device=device)
 
-    torch.onnx.export(model_G_rgb2raw.eval(), dummy_input_G, "G_%s_gan.onnx"%model_name)
-    torch.onnx.export(model_D_raw.eval(), dummy_input_D,     "D_%s_gan.onnx"%model_name)
+    torch.onnx.export(model_G_rgb2raw.eval(), dummy_input_G, f"G_{model_name + model_sig}_{model_type}.onnx")
+    torch.onnx.export(model_D_raw.eval(), dummy_input_D,     f"D_{model_name + model_sig}_{model_type}.onnx")
 
 
 
@@ -144,7 +147,7 @@ def train(args):
     # visualize test images
     test_batch = next( iter(dataloader['test']))
 
-    logpath = os.path.join('runs', model_name)
+    logpath = os.path.join('runs', model_name+model_sig)
     os.makedirs(logpath, exist_ok=True)
     summary = SummaryWriter(logpath)
     test_images = give_me_visualization(model_G_rgb2raw, None, 'cpu', test_batch)
@@ -370,14 +373,15 @@ if __name__ == '__main__':
     argparser.add_argument('--model_name', default='resnet', type=str,
                     choices=['resnet', 'unet', 'bwunet'],
                     help='(default=%(default)s)')
+    argparser.add_argument('--model_type', default="gan", type=str,
+                    choices=['gan', 'cyclegan', 'generative'], help='(default=gan, training type, GAN, CycleGAN, Generative')
     argparser.add_argument('--dataset_name', default='apple2orange', type=str,
                     choices=['sidd', 'pixelshift', 'apple2orange'],
                     help='(default=%(default)s)')
     argparser.add_argument('--dataset_path', default=os.path.join('datasets'), type=str,
-                    choices=['sidd', 'pixelshift', 'apple2orange'],
-                    help='(default=%(default)s)')
-    # argparser.add_argument('--checkpoint_path', default=f"checkpoint/apple2orange",
-    #                 type=str, help='(default=%(default)s)')
+                    help='(default=datasets')
+    argparser.add_argument('--model_sig', default="_hello",
+                    type=str, help='(default=model signature for same momdel different ckpt/log path)')
 
     argparser.add_argument('--device', default='cuda', type=str,
                     choices=['cpu','cuda'],

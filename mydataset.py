@@ -183,10 +183,15 @@ def give_me_dataloader(dataset, batch_size:int, shuffle=True, num_workers=4, dro
 
 
 class SingleDataset(DataLoader):
-    def __init__(self, dataset_dir, transforms):
+    def __init__(self, dataset_dir, transforms, mylen=-1):
         self.dataset_dir = dataset_dir
-        self.image_path = glob.glob(os.path.join(dataset_dir, "**/*") , recursive=True)
         self.transform = transforms
+        self.mylen = mylen
+
+        self.image_path = glob.glob(os.path.join(dataset_dir, "**/*") , recursive=True)
+        if mylen>0:
+            self.image_path = self.image_path[:mylen]
+
         print('--------> # of images: ', len(self.image_path))
 
     def __getitem__(self, index):
