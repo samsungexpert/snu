@@ -152,10 +152,12 @@ def give_me_dataloader(dataset, batch_size:int, shuffle=True, num_workers=4, dro
 
 
 class SingleDataset(DataLoader):
-    def __init__(self, dataset_dir, transforms, mylen=-1):
+    def __init__(self, dataset_dir, transforms, mylen=-1, bits=8):
         self.dataset_dir = dataset_dir
         self.transform = transforms
         self.mylen = mylen
+        self.bits = bits
+        self.max_val = (2**(bits-8))-1
 
         self.image_path = glob.glob(os.path.join(dataset_dir, "**/*") , recursive=True)
         if mylen>0:
@@ -165,10 +167,9 @@ class SingleDataset(DataLoader):
 
     def __getitem__(self, index):
         if self.image_path[index].split('.')[-1] == 'npy':
-            item = np.load(self.image_path[index]).astype(np.float32)
-            # print('item.shape', item.shape)
-            # exit()
-            item = self.transform(item[...,(0,1,3)])
+            item = np.load(self.image_path[index]).astype(np.float32)/self.max_val
+            item = np.clip(item[...,(0,1,3)].astype(np.uint8), 0, 255)
+            item = self.transform(Image.fromarray(item))
         else:
             item = self.transform(Image.open(self.image_path[index]))
         return item

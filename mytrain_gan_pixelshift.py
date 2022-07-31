@@ -64,12 +64,12 @@ def train(args):
     # path
     mytype = 'A'
     mytype = 'C'
+    mytype = ''
     train_path = os.path.join(base_path, 'train'+mytype)
     valid_path  = os.path.join(base_path, 'test'+mytype)
     test_path = os.path.join('imgs', dataset_name)
 
-    BITS = 14
-    MAXVAL = (2**14)
+
     mydata_path = {'train': train_path,
                    'valid': valid_path,
                    'test' : test_path}
@@ -78,14 +78,15 @@ def train(args):
     print('valid_path: ', valid_path)
     print('test_path: ', test_path)
     # transform
-    transform = {'train': give_me_transform('train', MAXVAL/2, MAXVAL/2),
-                 'valid': give_me_transform('valid', MAXVAL/2, MAXVAL/2),
-                 'test' : give_me_transform('test',  MAXVAL/2, MAXVAL/2)}
+    transform = {'train': give_me_transform('train'),
+                 'valid': give_me_transform('valid'),
+                 'test' : give_me_transform('test')}
 
     # dataloader
-    dataloader = {'train': give_me_dataloader(SingleDataset(mydata_path['train'], transform['train']), batch_size),
-                  'valid': give_me_dataloader(SingleDataset(mydata_path['valid'], transform['valid']), batch_size),
-                  'test' : give_me_dataloader(SingleDataset(mydata_path['test'],  transform['test']),  batch_size=2) }
+    BITS = 14
+    dataloader = {'train': give_me_dataloader(SingleDataset(mydata_path['train'], transform['train'], bits=BITS), batch_size),
+                  'valid': give_me_dataloader(SingleDataset(mydata_path['valid'], transform['valid'], bits=BITS), batch_size),
+                  'test' : give_me_dataloader(SingleDataset(mydata_path['test'],  transform['test'] , bits=BITS), batch_size=2) }
 
 
     nsteps={}
@@ -212,7 +213,8 @@ def train(args):
         print(f"\nEpoch {epoch}")
 
 
-        for state in ['train', 'valid']:
+        # for state in ['train', 'valid']:
+        for state in ['train']:
             print('hello ', state)
             pbar = tqdm(dataloader[state])
             for idx, rgbimage in enumerate(pbar):
