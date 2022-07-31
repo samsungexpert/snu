@@ -138,7 +138,7 @@ def main(args):
 
             # gdn = np.concatenate((rgb, img), axis=1)
 
-            gdn = (gdn+1)/2
+            gdn = (gdn+1)/2 # normalize to (0, 1) from (-1, 1)
 
             gdn = (gdn*255).astype(np.uint8)
 

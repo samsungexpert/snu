@@ -7,6 +7,7 @@ from PIL import Image
 from torch.utils.data import DataLoader
 from torchvision import transforms
 import torchvision.utils as vutils
+import matplotlib.pyplot as plt
 
 def give_me_test_images(input_size=256):
     fname = ['apple.jpg', 'orange.jpg']
@@ -38,6 +39,8 @@ def give_me_comparison(model, inputs, device):
     return outputs
 
 def degamma(image, device, alpha=0.05):
+    ## image ~ [-1, 1]
+    ## RGB2RAW
     # gamma = torch.tensor(np.array([2.2]))
     # offsets = torch.tensor([1-torch.abs(torch.randn(1)), 1, torch.abs(torch.randn(1))])
 
@@ -64,41 +67,36 @@ def degamma(image, device, alpha=0.05):
 
     return image.float()
 
-# def give_me_visualization_gan(model_rgb2raw, device, test_batch=None, nomalize=True):
-#     # visualize test images
-#     print('test_batch', type(test_batch))
-#     if test_batch != None:
-#         real_rgb_images = test_batch.cpu()
-#     else:
-#         real_rgb_images = give_me_test_images().to(device)
-#     real_raw_images = degamma(real_rgb_images, device)
-#     fake_raw_images = give_me_comparison(model_rgb2raw, real_rgb_images.to(device), device=device)
-#     print('real_rgb ', torch.amin(real_rgb_images), torch.amax(real_rgb_images))
-#     print('real_raw ', torch.amin(real_raw_images), torch.amax(real_raw_images))
-#     print('fake_rgb ', torch.amin(fake_rgb_images), torch.amax(fake_rgb_images))
-#     print('fake_raw ', torch.amin(fake_raw_images), torch.amax(fake_raw_images))
 
-#     real_rgb_images = vutils.make_grid(real_rgb_images, padding=2, normalize=nomalize)
-#     real_raw_images = vutils.make_grid(real_raw_images, padding=2, normalize=nomalize)
-#     fake_rgb_images = torch.zeros_like(real_rgb_images)
-#     fake_raw_images = vutils.make_grid(fake_raw_images, padding=2, normalize=nomalize)
 
-#     real_images = torch.cat((real_rgb_images,real_raw_images ), dim=2)
-#     fake_images = torch.cat((fake_rgb_images,fake_raw_images ), dim=2)
-#     test_images = torch.cat((real_images.cpu(), fake_images.cpu()), dim=1)
+def gamma(image, device, beta=(1/2.2), alpha=0.05):
+    ## image ~ [-1, 1] torch.tensor
+    ## RAW2RGB
 
-#     # if test_batch != None:
-#     test_images = test_images.permute(1,2,0)
-#     return test_images
+    gammas = 1 + np.random.randn(3,1)*alpha
+    gammas *= beta
+    gammas[1] = beta
+    gammas = torch.from_numpy(gammas)
+    gammas = gammas.unsqueeze(0)
+    gammas = gammas.unsqueeze(-1)
+    if device=='cuda':
+        gammas=gammas.cuda()
 
-def give_me_visualization(model_rgb2raw, model_raw2rgb=None, device='cpu', test_batch=None, nomalize=True):
+    # print('image.shape', image.shape)
+    # print('gammas.shape', gammas.shape, '\n', gammas)
+    image = (((image+1)/2)**(gammas)) * 2 - 1
+
+    return image.float()
+
+
+def give_me_visualization(model_rgb2raw, model_raw2rgb=None, device='cpu', test_batch=None, nomalize=True, beta_for_gamma=2.2):
     # visualize test images
     # print('test_batch', type(test_batch))
     if test_batch != None:
         real_rgb_images = test_batch.cpu()
     else:
         real_rgb_images = give_me_test_images().to(device)
-    real_raw_images = degamma(real_rgb_images, device)
+    real_raw_images = gamma(real_rgb_images, device, beta_for_gamma)
     if model_raw2rgb == None:
         fake_rgb_images = torch.zeros_like(real_raw_images)
     else:
@@ -124,39 +122,9 @@ def give_me_visualization(model_rgb2raw, model_raw2rgb=None, device='cpu', test_
 
 
 
-# def give_me_visualization(model_rgb2raw, model_raw2rgb, device, test_batch=None, nomalize=True):
-#     # visualize test images
-#     print('test_batch', type(test_batch))
-#     if test_batch != None:
-#         real_rgb_images = test_batch.cpu()
-#     else:
-#         real_rgb_images = give_me_test_images().to(device)
-#     real_raw_images = degamma(real_rgb_images, device)
-#     fake_rgb_images = give_me_comparison(model_raw2rgb, real_raw_images.to(device), device=device)
-#     fake_raw_images = give_me_comparison(model_rgb2raw, real_rgb_images.to(device), device=device)
-#     print('real_rgb ', torch.amin(real_rgb_images), torch.amax(real_rgb_images))
-#     print('real_raw ', torch.amin(real_raw_images), torch.amax(real_raw_images))
-#     print('fake_rgb ', torch.amin(fake_rgb_images), torch.amax(fake_rgb_images))
-#     print('fake_raw ', torch.amin(fake_raw_images), torch.amax(fake_raw_images))
-
-#     real_rgb_images = vutils.make_grid(real_rgb_images, padding=2, normalize=nomalize)
-#     real_raw_images = vutils.make_grid(real_raw_images, padding=2, normalize=nomalize)
-#     fake_rgb_images = vutils.make_grid(fake_rgb_images, padding=2, normalize=nomalize)
-#     fake_raw_images = vutils.make_grid(fake_raw_images, padding=2, normalize=nomalize)
-
-#     real_images = torch.cat((real_rgb_images,real_raw_images ), dim=2)
-#     fake_images = torch.cat((fake_rgb_images,fake_raw_images ), dim=2)
-#     test_images = torch.cat((real_images.cpu(), fake_images.cpu()), dim=1)
-
-#     # if test_batch != None:
-#     test_images = test_images.permute(1,2,0)
-#     return test_images
-
-
-
 
 # trandform
-def give_me_transform(type):
+def give_me_transform(type, mean=0.5, std=0.5):
 
     transform = None
     if type == 'train':
@@ -164,15 +132,16 @@ def give_me_transform(type):
             [
                 # transforms.Resize((args.size, args.size)),
                 transforms.RandomHorizontalFlip(),
+                transforms.RandomVerticalFlip(),
                 transforms.ToTensor(),
-                transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
+                transforms.Normalize(mean=(mean, mean, mean), std=(std, std, std)),
             ]
         )
     else:
         transform = transforms.Compose(
             [
                 transforms.ToTensor(),
-                transforms.Normalize(mean=(0.5, 0.5, 0.5), std=(0.5, 0.5, 0.5)),
+                transforms.Normalize(mean=(mean, mean, mean), std=(std, std, std)),
             ]
         )
     return transform
@@ -195,7 +164,13 @@ class SingleDataset(DataLoader):
         print('--------> # of images: ', len(self.image_path))
 
     def __getitem__(self, index):
-        item = self.transform(Image.open(self.image_path[index]))
+        if self.image_path[index].split('.')[-1] == 'npy':
+            item = np.load(self.image_path[index]).astype(np.float32)
+            # print('item.shape', item.shape)
+            # exit()
+            item = self.transform(item[...,(0,1,3)])
+        else:
+            item = self.transform(Image.open(self.image_path[index]))
         return item
 
     def __len__(self):
@@ -223,10 +198,44 @@ class UnpairedDataset(DataLoader):
         return len(self.image_path_A)
 
 
+def gamma_example():
+    test_images= give_me_test_images()
+    print(type(test_images[0]))
+    test_images = ((test_images/255.)-0.5)*2
+    print('test_images.shape', test_images[0].shape, type(test_images[0]), torch.min(test_images[0]), torch.max(test_images[0]))
+    fake_rgb=[]
+    fake_raw=[]
+
+    device = 'cpu'
+    for rgb in test_images:
+        ...
+        rgb = torch.tensor(rgb).to(device)
+        raw =  degamma(rgb.unsqueeze(0), 'cpu').to(device).squeeze()
+        rgb_ressc = gamma(raw, 'cpu').to(device).squeeze()
+        print('rgb.shape', rgb.shape, type(rgb), torch.min(rgb), torch.max(rgb))
+        print('raw.shape', raw.shape, type(raw), torch.min(raw), torch.max(raw))
+        print('rgb_ressc.shape', rgb_ressc.shape, type(rgb_ressc), torch.min(rgb_ressc), torch.max(rgb_ressc))
+
+        f = lambda x: (x+1)/2
 
 
-def main():
+        plt.figure()
+        plt.subplot(1,3,1)
+        plt.imshow(f(rgb.permute(1,2,0)))
+        plt.title('rgb')
 
+        plt.subplot(1,3,2)
+        plt.imshow(raw.permute(1,2,0))
+        plt.title('raw - degamma')
+
+        plt.subplot(1,3,3)
+        plt.imshow(rgb_ressc.permute(1,2,0))
+        plt.title('rgb_resc -  gamma')
+
+        plt.show()
+        exit()
+
+def degamma_example():
     test_images= give_me_test_images()
     print(type(test_images[0]))
     fake_rgb=[]
@@ -251,6 +260,12 @@ def main():
     image_degamma = degamma(image)
     print(image_degamma.shape)
     print(image_degamma)
+
+
+def main():
+    # degamma_example()
+    gamma_example()
+
 
 
 
