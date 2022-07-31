@@ -8,6 +8,7 @@ __pycache__/
 runs
 datasets
 checkpoint
+inference
 
 .DS_Store
 # C extensions
