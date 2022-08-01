@@ -18,6 +18,23 @@ from mydataset import * #give_me_dataloader, SingleDataset, give_me_transform, g
 from myloss import BayerLoss
 import matplotlib.pyplot as plt
 
+def save_model(modelG, modelD, ckpt_path, epoch):
+    ...
+    try:
+        fname = os.path.join(ckpt_path, f"{epoch}.pth")
+        if os.path.exists(fname):
+            fname = fname.split('.pth')[0] + '_1.pth'
+        torch.save(
+                {
+                    "model_G_rgb2raw": modelG.state_dict(),
+                    "model_D_raw": modelD.state_dict(),
+                    "epoch": epoch,
+                },
+                fname,
+        )
+    except:
+        print('something wrong......skip saving model at epoch ', epoch)
+
 
 def train(args):
     dev = "cuda" if torch.cuda.is_available() else "cpu"
@@ -50,7 +67,7 @@ def train(args):
     print('dataset_name = ', dataset_name)
     print('dataset_path = ', dataset_path)
 
-    # try:
+    # try:``
     #     shutil.rmtree('runs/gan')
     #     shutil.rmtree('checkpoint/gan')
     #     shutil.rmtree('runs')
@@ -64,29 +81,32 @@ def train(args):
     # path
     mytype = 'A'
     mytype = 'C'
-    mytype = ''
     train_path = os.path.join(base_path, 'train'+mytype)
-    valid_path  = os.path.join(base_path, 'test'+mytype)
-    test_path = os.path.join('imgs', dataset_name)
+    valid_path = os.path.join(base_path, 'valid'+mytype)
+    test_path  = os.path.join(base_path, 'test' +mytype)
+    viz_path   = os.path.join(base_path, 'viz' +mytype)
 
 
     mydata_path = {'train': train_path,
                    'valid': valid_path,
-                   'test' : test_path}
-    print(mydata_path)
-    print('train_path: ', train_path)
-    print('valid_path: ', valid_path)
-    print('test_path: ', test_path)
+                   'test' : test_path,
+                   'viz' : viz_path}
+    for k,v in mydata_path.items():
+        print(k,' : ', v)
+
+
     # transform
     transform = {'train': give_me_transform('train'),
                  'valid': give_me_transform('valid'),
-                 'test' : give_me_transform('test')}
+                 'test' : give_me_transform('test'),
+                 'viz' : give_me_transform('viz')}
 
     # dataloader
     BITS = 14
     dataloader = {'train': give_me_dataloader(SingleDataset(mydata_path['train'], transform['train'], bits=BITS), batch_size),
                   'valid': give_me_dataloader(SingleDataset(mydata_path['valid'], transform['valid'], bits=BITS), batch_size),
-                  'test' : give_me_dataloader(SingleDataset(mydata_path['test'],  transform['test'] , bits=BITS), batch_size=2) }
+                  'test' : give_me_dataloader(SingleDataset(mydata_path['test'],  transform['test'] , bits=BITS), batch_size=2),
+                  'viz'  : give_me_dataloader(SingleDataset(mydata_path['test'],  transform['viz']  , bits=BITS), batch_size=2) }
 
 
     nsteps={}
@@ -101,50 +121,38 @@ def train(args):
 
     ## ckpt save load if any
     ckpt_path_name = f'checkpoint/{model_type}/{dataset_name}'
+    ckpt_path_name_best = os.path.join(ckpt_path_name, model_name+model_sig+'_best')
     ckpt_path_name = os.path.join(ckpt_path_name, model_name+model_sig)
-    # ckpt_path_name = f"checkpoint/{dataset_name}"
+
     os.makedirs(ckpt_path_name, exist_ok=True)
+    os.makedirs(ckpt_path_name_best, exist_ok=True)
 
     ckpt_list = os.listdir(ckpt_path_name)
+    print(ckpt_list)
+
+
+    epoch = 0
     if (ckpt_path_name is not None) and \
         (len(ckpt_list) > 0) :
-
-        ckpt_list.sort()
-        ckpt_name = os.path.join(ckpt_path_name, ckpt_list[-1])
-        print('ckpt name = ', ckpt_name)
-        checkpoint = torch.load(ckpt_name, map_location=device)
-
-        model_G_rgb2raw.load_state_dict(checkpoint["model_G_rgb2raw"])
-        model_D_raw.load_state_dict(checkpoint["model_D_raw"])
-        epoch = checkpoint["epoch"]
+            ckpt_list.sort()
+            ckpt_name = os.path.join(ckpt_path_name, ckpt_list[-1])
+            print('ckpt name = ', ckpt_name)
+            if os.path.isfile(ckpt_name) and 'pth' in ckpt_name[-4:]:
+                checkpoint = torch.load(ckpt_name, map_location=device)
+                model_G_rgb2raw.load_state_dict(checkpoint["model_G_rgb2raw"])
+                model_D_raw.load_state_dict(checkpoint["model_D_raw"])
+                epoch = checkpoint["epoch"]
     else:
-        epoch = 0
-        try:
-            fname = os.path.join(ckpt_path_name, f"{epoch}.pth")
-            if os.path.exists(fname):
-                fname = fname.split('.pth')[0] + '_1.pth'
-            torch.save(
-                    {
-                        "model_G_rgb2raw": model_G_rgb2raw.state_dict(),
-                        "model_D_raw": model_D_raw.state_dict(),
-                        "epoch": epoch,
-                    },
-                    fname,
-            )
-        except:
-            print('skip')
+        save_model(model_G_rgb2raw, model_D_raw, ckpt_path_name, epoch)
 
 
 
+    ## save onnx
     dummy_input_G = torch.randn(1, 3, 256, 256, device=device)
     dummy_input_D = torch.randn(1, 6, 256, 256, device=device)
 
     torch.onnx.export(model_G_rgb2raw.eval(), dummy_input_G, f"G_{model_name + model_sig}_{model_type}.onnx")
     torch.onnx.export(model_D_raw.eval(), dummy_input_D,     f"D_{model_name + model_sig}_{model_type}.onnx")
-
-
-
-
 
 
     # visualize test images
@@ -153,7 +161,9 @@ def train(args):
     logpath = os.path.join('runs', model_name+model_sig)
     os.makedirs(logpath, exist_ok=True)
     summary = SummaryWriter(logpath)
-    test_images = give_me_visualization(model_G_rgb2raw, None, 'cpu', test_batch, beta_for_gamma=1/2.2)
+    test_images = give_me_visualization(model_rgb2raw=model_G_rgb2raw,
+                                        model_raw2rgb=None,
+                                        device='cpu', test_batch=test_batch, nomalize=True, beta_for_gamma=1/2.2)
     summary.add_image('Generated_pairs', test_images.permute(2,0,1), 0)
     # plt.imshow(test_images)
     # plt.title('Real RGB \t Real RAW \n Fake RGB \t Fake RAW')
@@ -204,7 +214,7 @@ def train(args):
     disp = {'train':disp_train, 'valid':disp_valid}
 
     step = 0
-    loss_best_G = 1e10
+    loss_best_G_valid = 9e20
 
     beta_for_gamma=1/2.2
 
@@ -213,8 +223,9 @@ def train(args):
         print(f"\nEpoch {epoch}")
 
 
-        # for state in ['train', 'valid']:
-        for state in ['train']:
+        loss_G_total = 0
+        for state in ['train', 'valid']:
+        # for state in ['train']:
             print('hello ', state)
             pbar = tqdm(dataloader[state])
             for idx, rgbimage in enumerate(pbar):
@@ -312,18 +323,15 @@ def train(args):
 
                 loss_D = loss_D_raw
 
-
-
                 # backward for discriminator
                 if state == 'train':
                     loss_D_raw.backward()
                     optim_D_raw.step()
                     step+=1
-                    if loss_best_G > loss_G:
-                        loss_best_G = loss_G
-                        summary.add_scalar(f"loss_best_G{state}", loss_best_G, step)
 
-
+                ## accumulate generator loss in validataion to save best ckpt
+                if state == 'valid':
+                    loss_G_total += loss_G
 
                 # -----------------
                 # record loss for tensorboard
@@ -345,8 +353,22 @@ def train(args):
                     disp[state].reset()
 
                     # log images
-                    test_images = give_me_visualization(model_G_rgb2raw, None, device, test_batch)
+                    # test_images = give_me_visualization(model_G_rgb2raw, None, device, test_batch)
+
+                    test_images = give_me_visualization(model_rgb2raw=model_G_rgb2raw,
+                                        model_raw2rgb=None,
+                                        device=device, test_batch=test_batch, nomalize=True, beta_for_gamma=1/2.2)
+
                     summary.add_image('Generated_pairs', test_images.permute(2,0,1), step)
+        else:
+            if state=='valid':
+                loss_G_average = loss_G_total / len(dataloader[state])
+                print(f'best ckpt updated!!!  old best {loss_best_G_valid} vs new best {loss_G_average}')
+                if loss_best_G_valid > loss_G_average:
+                        loss_best_G_train = loss_G_average
+                        summary.add_scalar(f"loss_best_G{state}", loss_best_G_train, step)
+                        save_model(model_G_rgb2raw, model_D_raw, ckpt_path_name_best, epoch)
+
 
 
         # Step scheduler
@@ -354,16 +376,9 @@ def train(args):
         scheduler_D_rgb2raw.step()
 
 
-        # Save checkpoint
-        if epoch % 10 == 0:
-            torch.save(
-                {
-                    "model_G_rgb2raw": model_G_rgb2raw.state_dict(),
-                    "model_D_raw":     model_D_raw.state_dict(),
-                    "epoch": epoch,
-                },
-                os.path.join(ckpt_path_name, "gan_%05d.pth"%epoch),
-            )
+        # Save checkpoint for every 5 epoch
+        if epoch % 5 == 0:
+            save_model(model_G_rgb2raw, model_D_raw, ckpt_path_name, epoch)
 
 
     print('done done')
@@ -386,14 +401,14 @@ if __name__ == '__main__':
                     help='(default=%(default)s)')
     argparser.add_argument('--dataset_path', default=os.path.join('datasets'), type=str,
                     help='(default=datasets')
-    argparser.add_argument('--model_sig', default="_hello",
+    argparser.add_argument('--model_sig', default="_hansol",
                     type=str, help='(default=model signature for same momdel different ckpt/log path)')
 
     argparser.add_argument('--device', default='cuda', type=str,
                     choices=['cpu','cuda'],
                     help='(default=%(default)s)')
     argparser.add_argument('--input_size', type=int, help='input size', default=128)
-    argparser.add_argument('--epoch', type=int, help='epoch number', default=2)
+    argparser.add_argument('--epoch', type=int, help='epoch number', default=12)
     argparser.add_argument('--lr', type=float, help='learning rate', default=1e-3)
     argparser.add_argument('--batch_size', type=int, help='mini batch size', default=2)
     argparser.add_argument("--lambda_ide", type=float, default=10)

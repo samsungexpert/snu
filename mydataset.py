@@ -97,11 +97,14 @@ def give_me_visualization(model_rgb2raw, model_raw2rgb=None, device='cpu', test_
     else:
         real_rgb_images = give_me_test_images().to(device)
     real_raw_images = gamma(real_rgb_images, device, beta_for_gamma)
+    fake_rgb_images = give_me_comparison(model_rgb2raw, real_raw_images.to(device), device=device)
     if model_raw2rgb == None:
-        fake_rgb_images = torch.zeros_like(real_raw_images)
+        # fake_rgb_images = torch.zeros_like(real_raw_images)
+        fake_raw_images = torch.abs(real_rgb_images - fake_rgb_images)
+
     else:
-        fake_rgb_images = give_me_comparison(model_raw2rgb, real_raw_images.to(device), device=device)
-    fake_raw_images = give_me_comparison(model_rgb2raw, real_rgb_images.to(device), device=device)
+        fake_raw_images = give_me_comparison(model_raw2rgb, real_raw_images.to(device), device=device)
+
     print('real_rgb (%.3f, %.3f), ' %(torch.amin(real_rgb_images), torch.amax(real_rgb_images)), end='')
     print('real_raw (%.3f, %.3f), ' %(torch.amin(real_raw_images), torch.amax(real_raw_images)), end='')
     print('fake_rgb (%.3f, %.3f), ' %(torch.amin(fake_rgb_images), torch.amax(fake_rgb_images)), end='')
@@ -112,8 +115,8 @@ def give_me_visualization(model_rgb2raw, model_raw2rgb=None, device='cpu', test_
     fake_rgb_images = vutils.make_grid(fake_rgb_images, padding=2, normalize=nomalize)
     fake_raw_images = vutils.make_grid(fake_raw_images, padding=2, normalize=nomalize)
 
-    real_images = torch.cat((real_rgb_images,real_raw_images ), dim=2)
-    fake_images = torch.cat((fake_rgb_images.cpu(),fake_raw_images.cpu() ), dim=2)
+    real_images = torch.cat((real_raw_images, real_rgb_images ), dim=2)
+    fake_images = torch.cat((fake_raw_images.cpu(), fake_rgb_images.cpu() ), dim=2)
     test_images = torch.cat((real_images.cpu(), fake_images.cpu()), dim=1)
 
     # if test_batch != None:
