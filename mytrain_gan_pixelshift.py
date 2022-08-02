@@ -88,9 +88,9 @@ def train(args):
 
 
     mydata_path = {'train': train_path,
-                   'valid': valid_path,
-                   'test' : test_path,
-                   'viz' : viz_path}
+                   'valid': test_path, #valid_path,
+                   'test' : viz_path,  #test_path,
+                   'viz'  : viz_path}
     for k,v in mydata_path.items():
         print(k,' : ', v)
 
@@ -105,7 +105,7 @@ def train(args):
     BITS = 14
     dataloader = {'train': give_me_dataloader(SingleDataset(mydata_path['train'], transform['train'], bits=BITS), batch_size),
                   'valid': give_me_dataloader(SingleDataset(mydata_path['valid'], transform['valid'], bits=BITS), batch_size),
-                  'test' : give_me_dataloader(SingleDataset(mydata_path['test'],  transform['test'] , bits=BITS), batch_size=2),
+                  'test' : give_me_dataloader(SingleDataset(mydata_path['test'],  transform['test'] , bits=BITS), batch_size),
                   'viz'  : give_me_dataloader(SingleDataset(mydata_path['test'],  transform['viz']  , bits=BITS), batch_size=2) }
 
 
