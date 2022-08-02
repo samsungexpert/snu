@@ -18,12 +18,11 @@ from mydataset import * #give_me_dataloader, SingleDataset, give_me_transform, g
 from myloss import BayerLoss
 import matplotlib.pyplot as plt
 
-def save_model(modelG, modelD, ckpt_path, epoch):
-    ...
+def save_model(modelG, modelD, ckpt_path, epoch, loss=0.0, state='valid'):
     try:
-        fname = os.path.join(ckpt_path, "{%05d}.pth"%epoch)
+        fname = os.path.join(ckpt_path, "pix2pix_epoch_%05d__loss_%05.3e.pth"%(epoch, loss))
         if os.path.exists(fname):
-            fname = fname.split('.pth')[0] + '_1.pth'
+            fname = fname.split('.pth')[0] + f'_{state}_1.pth'
         torch.save(
                 {
                     "model_G_A2B": modelG.state_dict(),
@@ -110,9 +109,9 @@ def train(args):
 
 
     nsteps={}
-    for state in ['train', 'valid']:
+    for state in ['train', 'valid', 'test', 'viz']:
         nsteps[state] = len(dataloader[state])
-        print( '%s len(%s): ' % (state , len(dataloader[state]) ))
+        print( '%s len(%s): ' % (state , nsteps[state] ))
 
     # model
     model_G_A2B = mygen_model(model_name).to(device) # RGB --> RAW
@@ -143,7 +142,7 @@ def train(args):
                 model_D_B.load_state_dict(checkpoint["model_D_B"])
                 epoch = checkpoint["epoch"]
     else:
-        save_model(model_G_A2B, model_D_B, ckpt_path_name, epoch)
+        save_model(model_G_A2B, model_D_B, ckpt_path_name, epoch, float('inf'))
 
 
 
@@ -215,7 +214,10 @@ def train(args):
 
 
     step = {'train':0, 'valid':0}
-    loss_best_G_valid = float('inf')
+
+    # loss_best_G_valid = float('inf')
+    loss_best_G = {'train':float('inf'), 'valid':float('inf')}
+    loss_G_train_last = float('inf')
 
     beta_for_gamma = 1/2.2
 
@@ -223,7 +225,9 @@ def train(args):
         epoch += 1
         print(f"\nEpoch {epoch}")
 
-        loss_G_total = 0
+        loss_G_total = {'train':0, 'valid':0}
+        # loss_G_total_train = 0
+        # loss_G_total_valid = 0
         for state in ['train', 'valid']:
             print('hello ', state)
             pbar = tqdm(dataloader[state])
@@ -248,9 +252,7 @@ def train(args):
                 # ----------------------------------
                 # Forward
                 # ----------------------------------
-                fake_B = model_G_A2B(real_A) # ok
-
-
+                fake_B = model_G_A2B(real_A)
 
                 # ----------------------------------
                 # Train Discriminator Raw
@@ -267,11 +269,11 @@ def train(args):
                 # fake
                 fake_AB   = torch.cat((real_A, fake_B), axis=1)
                 pred_fake = model_D_B(fake_AB.detach())
-                loss_D_fake = criterion_GAN(pred_fake, torch.ones_like( pred_fake))
+                loss_D_fake = criterion_GAN(pred_fake, torch.zeros_like(pred_fake))
                 # real
                 real_AB   = torch.cat((real_A, real_B), axis=1)
                 pred_real = model_D_B(real_AB)
-                loss_D_real = criterion_GAN(pred_real, torch.ones_like( pred_fake))
+                loss_D_real = criterion_GAN(pred_real, torch.ones_like(pred_fake))
 
                 loss_D_raw = (loss_D_fake + loss_D_real) * 0.5
 
@@ -303,6 +305,7 @@ def train(args):
                 loss_G = 0
                 loss_G += args.lambda_generation *  loss_generation
                 loss_G += args.lambda_gan * loss_G_GAN
+                loss_G_train_last = loss_G # for save
 
                 step[state] += 1
                 if state == 'train':
@@ -317,8 +320,7 @@ def train(args):
 
 
                 ## accumulate generator loss in validataion to save best ckpt
-                if state == 'valid':
-                    loss_G_total += loss_G
+                loss_G_total[state] += loss_G
 
                 # -----------------
                 # record loss for tensorboard
@@ -347,13 +349,14 @@ def train(args):
                     summary.add_image('Generated_pairs', test_images.permute(2,0,1), step[state])
 
         else:
-            if state=='valid':
-                loss_G_average = loss_G_total / len(dataloader[state])
-                if loss_best_G_valid > loss_G_average:
-                    print(f'best ckpt updated!!!  old best {loss_best_G_valid} vs new best {loss_G_average}')
-                    loss_best_G_valid = loss_G_average
-                    summary.add_scalar(f"loss_best_G{state}", loss_best_G_valid, step[state])
-                    save_model(model_G_A2B, model_D_B, ckpt_path_name_best, epoch)
+
+            loss_G_average = loss_G_total[state] / nsteps[state]
+            if loss_best_G[state] > loss_G_average:
+                print(f'best {state} ckpt updated!!!  old best {loss_best_G[state]} vs new best {loss_G_average}')
+                loss_best_G[state] = loss_G_average
+                summary.add_scalar(f"loss_best_G{state}", loss_best_G[state], step[state])
+                save_model(model_G_A2B, model_D_B, ckpt_path_name_best, epoch, loss_best_G[state])
+
 
 
 
@@ -364,7 +367,7 @@ def train(args):
 
         # Save checkpoint for every 5 epoch
         if epoch % 5 == 0:
-            save_model(model_G_A2B, model_D_B, ckpt_path_name, epoch)
+            save_model(model_G_A2B, model_D_B, ckpt_path_name, epoch, loss_G_train_last)
 
 
     print('done done')
@@ -394,7 +397,7 @@ if __name__ == '__main__':
                     choices=['cpu','cuda'],
                     help='(default=%(default)s)')
     argparser.add_argument('--input_size', type=int, help='input size', default=128)
-    argparser.add_argument('--epoch', type=int, help='epoch number', default=35)
+    argparser.add_argument('--epoch', type=int, help='epoch number', default=200)
     argparser.add_argument('--lr', type=float, help='learning rate', default=1e-3)
     argparser.add_argument('--batch_size', type=int, help='mini batch size', default=2)
     argparser.add_argument("--lambda_ide", type=float, default=10)
