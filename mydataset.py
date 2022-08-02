@@ -81,43 +81,43 @@ def gamma(image, device, beta=(1/2.2), alpha=0.05):
     gammas = gammas.unsqueeze(-1)
     if device=='cuda':
         gammas=gammas.cuda()
-
+    gammas=gammas.to(device)
     # print('image.shape', image.shape)
     # print('gammas.shape', gammas.shape, '\n', gammas)
-    image = (((image+1)/2)**(gammas)) * 2 - 1
+    image = (((image.to(device)+1)/2)**(gammas)) * 2 - 1
 
     return image.float()
 
 
-def give_me_visualization(model_rgb2raw, model_raw2rgb=None, device='cpu', test_batch=None, nomalize=True, beta_for_gamma=2.2):
+def give_me_visualization(model_A2B, model_B2A=None, device='cpu', test_batch=None, nomalize=True, beta_for_gamma=2.2):
     # visualize test images
     # print('test_batch', type(test_batch))
     if test_batch != None:
-        real_rgb_images = test_batch.cpu()
+        real_B_images = test_batch.cpu() # RAW
     else:
-        real_rgb_images = give_me_test_images().to(device)
-    real_raw_images = gamma(real_rgb_images, device, beta_for_gamma)
-    fake_rgb_images = give_me_comparison(model_rgb2raw, real_raw_images.to(device), device=device)
-    if model_raw2rgb == None:
+        real_B_images = give_me_test_images().to(device)
+    real_A_images = gamma(real_B_images, device, beta_for_gamma) # RGB
+    fake_B_images = give_me_comparison(model_A2B, real_A_images.to(device), device=device)
+    if model_B2A == None:
         # fake_rgb_images = torch.zeros_like(real_raw_images)
-        fake_raw_images = torch.abs(real_rgb_images - fake_rgb_images)
+        fake_A_images = torch.abs(real_B_images.to(device) - fake_B_images.to(device)) ## diff when pix2pix
 
     else:
-        fake_raw_images = give_me_comparison(model_raw2rgb, real_raw_images.to(device), device=device)
+        fake_A_images = give_me_comparison(model_B2A, real_B_images.to(device), device=device)
 
-    print('real_rgb (%.3f, %.3f), ' %(torch.amin(real_rgb_images), torch.amax(real_rgb_images)), end='')
-    print('real_raw (%.3f, %.3f), ' %(torch.amin(real_raw_images), torch.amax(real_raw_images)), end='')
-    print('fake_rgb (%.3f, %.3f), ' %(torch.amin(fake_rgb_images), torch.amax(fake_rgb_images)), end='')
-    print('fake_raw (%.3f, %.3f), ' %(torch.amin(fake_raw_images), torch.amax(fake_raw_images)))
+    print('real_A (%.3f, %.3f), ' %(torch.amin(real_A_images), torch.amax(real_A_images)), end='')
+    print('real_B (%.3f, %.3f), ' %(torch.amin(real_B_images), torch.amax(real_B_images)), end='')
+    print('fake_A (%.3f, %.3f), ' %(torch.amin(fake_A_images), torch.amax(fake_A_images)), end='')
+    print('fake_B (%.3f, %.3f), ' %(torch.amin(fake_B_images), torch.amax(fake_B_images)))
 
-    real_rgb_images = vutils.make_grid(real_rgb_images, padding=2, normalize=nomalize)
-    real_raw_images = vutils.make_grid(real_raw_images, padding=2, normalize=nomalize)
-    fake_rgb_images = vutils.make_grid(fake_rgb_images, padding=2, normalize=nomalize)
-    fake_raw_images = vutils.make_grid(fake_raw_images, padding=2, normalize=nomalize)
+    real_A_images = vutils.make_grid(real_A_images, padding=2, normalize=nomalize)
+    real_B_images = vutils.make_grid(real_B_images, padding=2, normalize=nomalize)
+    fake_A_images = vutils.make_grid(fake_A_images, padding=2, normalize=nomalize)
+    fake_B_images = vutils.make_grid(fake_B_images, padding=2, normalize=nomalize)
 
-    real_images = torch.cat((real_raw_images, real_rgb_images ), dim=2)
-    fake_images = torch.cat((fake_raw_images.cpu(), fake_rgb_images.cpu() ), dim=2)
-    test_images = torch.cat((real_images.cpu(), fake_images.cpu()), dim=1)
+    real_images = torch.cat((real_A_images.cpu(), real_B_images.cpu() ), dim=2)
+    fake_images = torch.cat((fake_A_images.cpu(), fake_B_images.cpu() ), dim=2)
+    test_images = torch.cat((real_images.cpu(),   fake_images.cpu()),    dim=1)
 
     # if test_batch != None:
     test_images = test_images.permute(1,2,0)
