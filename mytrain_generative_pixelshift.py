@@ -149,7 +149,7 @@ def train(args):
     # visualize test images
     test_batch = next( iter(dataloader['test']))
 
-    logpath = os.path.join('runs', model_name+model_sig)
+    logpath = os.path.join('runs', model_name+model_sig+'_'+model_type)
     os.makedirs(logpath, exist_ok=True)
     summary = SummaryWriter(logpath)
     test_images = give_me_visualization(model_A2B=model_G_A2B,
@@ -306,7 +306,7 @@ if __name__ == '__main__':
     argparser.add_argument('--model_name', default='resnet', type=str,
                     choices=['resnet', 'unet', 'bwunet'],
                     help='(default=%(default)s)')
-    argparser.add_argument('--model_type', default="gan", type=str,
+    argparser.add_argument('--model_type', default="generative", type=str,
                     choices=['gan', 'cyclegan', 'generative'], help='(default=gan, training type, GAN, CycleGAN, Generative')
     argparser.add_argument('--dataset_name', default='pixelshift', type=str,
                     choices=['sidd', 'pixelshift', 'apple2orange'],
