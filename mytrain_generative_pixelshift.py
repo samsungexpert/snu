@@ -8,6 +8,11 @@ import numpy as np
 from tqdm import tqdm
 from torch import nn, optim
 
+# CUDA_VISIBLE_DEVICES=0 python mytrain_generative_pixelshift.py --dataset_path=/home/team19/datasets --batch_size=8 --epoch=200 --model_name=bwunet
+# CUDA_VISIBLE_DEVICES=1 python mytrain_generative_pixelshift.py --dataset_path=/home/team19/datasets --batch_size=8 --epoch=200 --model_name=unet
+# CUDA_VISIBLE_DEVICES=2 python mytrain_generative_pixelshift.py --dataset_path=/home/team19/datasets --batch_size=8 --epoch=200 --model_name=resnet
+
+
 # from util.visualizer import Visualizer
 from mymodel import mygen_model, mydisc_model, set_requires_grad
 from myutils import LossDisplayer
@@ -18,17 +23,15 @@ from mydataset import * #give_me_dataloader, SingleDataset, give_me_transform, g
 from myloss import BayerLoss
 import matplotlib.pyplot as plt
 
-def save_model(modelG, modelD, ckpt_path, epoch):
-    ...
+def save_model(modelG, ckpt_path, epoch, loss=0.0, state='valid'):
     try:
-        fname = os.path.join(ckpt_path, f"{epoch}.pth")
+        fname = os.path.join(ckpt_path, "generation_epoch_%05d__loss_%05.3e.pth"%(epoch, loss))
         if os.path.exists(fname):
-            fname = fname.split('.pth')[0] + '_1.pth'
+            fname = fname.split('.pth')[0] + f'_{state}_1.pth'
         torch.save(
                 {
-                    "model_G_rgb2raw": modelG.state_dict(),
-                    "model_D_raw": modelD.state_dict(),
-                    "epoch": epoch,
+                    "model_generation_A2B": modelG.state_dict(),
+                    "epoch"      : epoch,
                 },
                 fname,
         )
@@ -67,19 +70,11 @@ def train(args):
     print('dataset_name = ', dataset_name)
     print('dataset_path = ', dataset_path)
 
-    # try:``
-    #     shutil.rmtree('runs/gan')
-    #     shutil.rmtree('checkpoint/gan')
-    #     shutil.rmtree('runs')
-    # except:
-    #     pass
-
     # dataset
     base_path = os.path.join(dataset_path, dataset_name)
     print('base_path: ', base_path)
 
     # path
-    mytype = 'A'
     mytype = 'C'
     train_path = os.path.join(base_path, 'train'+mytype)
     valid_path = os.path.join(base_path, 'valid'+mytype)
@@ -88,9 +83,9 @@ def train(args):
 
 
     mydata_path = {'train': train_path,
-                   'valid': valid_path,
-                   'test' : test_path,
-                   'viz' : viz_path}
+                   'valid': test_path, #valid_path,
+                   'test' : viz_path,  #test_path,
+                   'viz'  : viz_path}
     for k,v in mydata_path.items():
         print(k,' : ', v)
 
@@ -105,18 +100,17 @@ def train(args):
     BITS = 14
     dataloader = {'train': give_me_dataloader(SingleDataset(mydata_path['train'], transform['train'], bits=BITS), batch_size),
                   'valid': give_me_dataloader(SingleDataset(mydata_path['valid'], transform['valid'], bits=BITS), batch_size),
-                  'test' : give_me_dataloader(SingleDataset(mydata_path['test'],  transform['test'] , bits=BITS), batch_size=2),
+                  'test' : give_me_dataloader(SingleDataset(mydata_path['test'],  transform['test'] , bits=BITS), batch_size),
                   'viz'  : give_me_dataloader(SingleDataset(mydata_path['test'],  transform['viz']  , bits=BITS), batch_size=2) }
 
 
     nsteps={}
-    for state in ['train', 'valid']:
+    for state in ['train', 'valid', 'test', 'viz']:
         nsteps[state] = len(dataloader[state])
-        print( '%s len(%s): ' % (state , len(dataloader[state]) ))
+        print( '%s len(%s): ' % (state , nsteps[state] ))
 
     # model
-    model_G_rgb2raw = mygen_model(model_name).to(device)
-    model_D_raw     = mydisc_model('basic', input_nc=6).to(device)
+    model_G_A2B = mygen_model(model_name).to(device) # RGB --> RAW
 
 
     ## ckpt save load if any
@@ -139,20 +133,17 @@ def train(args):
             print('ckpt name = ', ckpt_name)
             if os.path.isfile(ckpt_name) and 'pth' in ckpt_name[-4:]:
                 checkpoint = torch.load(ckpt_name, map_location=device)
-                model_G_rgb2raw.load_state_dict(checkpoint["model_G_rgb2raw"])
-                model_D_raw.load_state_dict(checkpoint["model_D_raw"])
+                model_G_A2B.load_state_dict(checkpoint["model_generation_A2B"])
                 epoch = checkpoint["epoch"]
     else:
-        save_model(model_G_rgb2raw, model_D_raw, ckpt_path_name, epoch)
+        save_model(model_G_A2B, ckpt_path_name, epoch, float('inf'))
 
 
 
     ## save onnx
     dummy_input_G = torch.randn(1, 3, 256, 256, device=device)
-    dummy_input_D = torch.randn(1, 6, 256, 256, device=device)
 
-    torch.onnx.export(model_G_rgb2raw.eval(), dummy_input_G, f"G_{model_name + model_sig}_{model_type}.onnx")
-    torch.onnx.export(model_D_raw.eval(), dummy_input_D,     f"D_{model_name + model_sig}_{model_type}.onnx")
+    torch.onnx.export(model_G_A2B.eval(), dummy_input_G, f"Generation_{model_name + model_sig}_{model_type}.onnx")
 
 
     # visualize test images
@@ -161,8 +152,8 @@ def train(args):
     logpath = os.path.join('runs', model_name+model_sig)
     os.makedirs(logpath, exist_ok=True)
     summary = SummaryWriter(logpath)
-    test_images = give_me_visualization(model_rgb2raw=model_G_rgb2raw,
-                                        model_raw2rgb=None,
+    test_images = give_me_visualization(model_A2B=model_G_A2B,
+                                        model_B2A=None,
                                         device='cpu', test_batch=test_batch, nomalize=True, beta_for_gamma=1/2.2)
     summary.add_image('Generated_pairs', test_images.permute(2,0,1), 0)
     # plt.imshow(test_images)
@@ -172,8 +163,7 @@ def train(args):
 
 
     # make model in training mode
-    model_G_rgb2raw.train()
-    model_D_raw.train()
+    model_G_A2B.train()
 
     # Loss
     criterion_bayer = BayerLoss()
@@ -183,202 +173,124 @@ def train(args):
     criterion_GAN = nn.MSELoss() #  vanilla: nn.BCEWithLogitsLoss(), lsgan: nn.MseLoss()
 
     # Optimizer, Schedular
-    optim_G = optim.Adam(
-        model_G_rgb2raw.parameters(),
-        lr=args.lr,
-        betas=(0.5, 0.999),
+    optim_G = optim.Adam(model_G_A2B.parameters(), lr=args.lr, betas=(0.5, 0.999),
     )
 
-    optim_D_raw = optim.Adam(model_D_raw.parameters(), lr=args.lr)
 
     lr_lambda = lambda epoch: 1 - ((epoch - 1) // 100) / (args.epoch / 100)
     scheduler_G         = optim.lr_scheduler.LambdaLR(
                                     optimizer=optim_G,
                                     lr_lambda=lr_lambda)
-    scheduler_D_rgb2raw = optim.lr_scheduler.LambdaLR(
-                                    optimizer=optim_D_raw,
-                                    lr_lambda=lr_lambda)
-
-
     # Training
     # logger for tensorboard.
 
-    disp_train = LossDisplayer(["G_train",
-                                "G_GAN_train",
-                                "G_Identity_train",
-                                "D_train"])
-    disp_valid = LossDisplayer(["G_valid",
-                                "G_GAN_valid",
-                                "G_Identity_valid",
-                                "D_valid"])
+    disp_train = LossDisplayer(["G_train"])
+    disp_valid = LossDisplayer(["G_valid"])
     disp = {'train':disp_train, 'valid':disp_valid}
 
-    step = 0
-    loss_best_G_valid = 9e20
 
-    beta_for_gamma=1/2.2
+    step = {'train':0, 'valid':0}
+
+    # loss_best_G_valid = float('inf')
+    loss_best_G = {'train':float('inf'), 'valid':float('inf')}
+    loss_G_train_last = float('inf')
+
+    beta_for_gamma = 1/2.2
 
     while epoch < args.epoch:
         epoch += 1
         print(f"\nEpoch {epoch}")
 
-
-        loss_G_total = 0
+        loss_G_total = {'train':0, 'valid':0}
         for state in ['train', 'valid']:
-        # for state in ['train']:
             print('hello ', state)
             pbar = tqdm(dataloader[state])
-            for idx, rgbimage in enumerate(pbar):
+            for idx, real_B in enumerate(pbar):
                 pbar.set_description('Processing %s...  epoch %d' % (state, epoch))
 
                 if state == 'train' and idx == 0:
                     # train mode
-                    model_G_rgb2raw.train()
-                    optim_G.zero_grad()
+                    model_G_A2B.train()
                 elif state == 'valid' and idx == 0:
                     # eval mode
-                    model_G_rgb2raw.eval()
+                    model_G_A2B.eval()
 
 
                 # degamma to make raw image
-                real_rgb = rgbimage.to(device)
-                real_raw = gamma(rgbimage, device, beta=beta_for_gamma).to(device)
+                real_B = real_B.to(device)
+                real_A = gamma(real_B, device, beta=beta_for_gamma).to(device)
 
 
-                # -----------------
+                # ----------------------------------
+                # Forward
+                # ----------------------------------
+                fake_B = model_G_A2B(real_A)
+
+                # ----------------------------------
                 # Train Generators
-                # -----------------
+                # ----------------------------------
+
+                ## UnFreeze D when training Generators
 
 
+                loss_generation = criterion_generation(fake_B, real_B)
 
-                #### Forward
-                fake_raw = model_G_rgb2raw(real_rgb)
+                # combine loss and calculate gradients
+                loss_G = 0
+                # loss_G += args.lambda_generation *  loss_generation
+                loss_G += loss_generation
+                loss_G_train_last = loss_G # for save
 
-
-                ## freeze D when training Generators
-                set_requires_grad([model_D_raw], False)
-
-
+                step[state] += 1
                 if state == 'train':
                     optim_G.zero_grad()
-
-
-                loss_G = 0
-
-                # Generation Loss
-                generation_raw = model_G_rgb2raw(real_rgb)
-
-                loss_generation_raw = criterion_generation(generation_raw, real_raw)
-                loss_generation = loss_generation_raw
-
-                loss_G += args.lambda_generation *  loss_generation
-
-
-                # GAN loss
-                din = torch.cat([fake_raw, real_rgb], axis=1)
-                # print('din.shape', din.shape)
-                pred_fake_raw = model_D_raw(din)
-
-                loss_GAN_raw  = criterion_GAN(pred_fake_raw, torch.ones_like(pred_fake_raw))
-                loss_GAN = loss_GAN_raw
-
-                loss_G += args.lambda_gan * loss_GAN
-
-
-
-                if state == 'train':
                     loss_G.backward()
                     optim_G.step()
-
-
-
-                # -----------------
-                # Discriminator Setup
-                # -----------------
-                if state == 'train':
-                    optim_D_raw.zero_grad()
-                    require_grad_for_D = True
                 else:
-                    require_grad_for_D = False
-
-                 ## freeze D when training Generators
-                set_requires_grad([model_D_raw, model_D_raw], require_grad_for_D)
-
-
-
-                # -----------------
-                # Train Discriminator Raw
-                # -----------------
-                din1 = torch.cat([real_raw, real_rgb], axis=1)
-                din0 = torch.cat([real_raw, real_rgb], axis=1)
-                pred_real_raw = model_D_raw(din1)
-                pred_fake_raw = model_D_raw(din0.detach())
-
-                loss_D_raw_real = criterion_GAN(pred_real_raw, torch.ones_like( pred_real_raw))
-                loss_D_raw_fake = criterion_GAN(pred_fake_raw, torch.zeros_like(pred_fake_raw))
-                loss_D_raw = 0.5 * ( loss_D_raw_real + loss_D_raw_fake )
-
-
-                # ----------------
-
-                loss_D = loss_D_raw
-
-                # backward for discriminator
-                if state == 'train':
-                    loss_D_raw.backward()
-                    optim_D_raw.step()
-                    step+=1
+                    if idx == 0:
+                        step['valid'] = step['train']
 
                 ## accumulate generator loss in validataion to save best ckpt
-                if state == 'valid':
-                    loss_G_total += loss_G
+                loss_G_total[state] += loss_G
 
                 # -----------------
                 # record loss for tensorboard
                 # -----------------
-                disp[state].record([loss_G, loss_GAN, loss_generation, loss_D])
-                if step%100==0 :
+                disp[state].record([loss_G])
+                if step[state]%100==0 and idx>1:
                     avg_losses = disp[state].get_avg_losses()
-                    summary.add_scalar(f"loss_G_{state}",           avg_losses[0], step)
-                    summary.add_scalar(f"loss_G_G_GAN_{state}",     avg_losses[1], step)
-                    summary.add_scalar(f"loss_G_Generation_{state}",  avg_losses[2], step)
-                    summary.add_scalar(f"loss_D{state}",     avg_losses[3], step)
+                    summary.add_scalar(f"loss_G_{state}",           avg_losses[0], step[state])
 
-                    print(f'{state} : epoch{epoch}, step{step}------------------------------------------------------')
+                    print(f'{state} : epoch{epoch}, step{step[state]}------------------------------------------------------')
                     print('loss_G: %.3f, ' % avg_losses[0], end='')
-                    print('loss_G_G_GAN: %.3f, ' % avg_losses[1], end='')
-                    print('loss_G_Generation: %.3f, ' % avg_losses[2], end='')
-                    print('loss_D: %.3f' % avg_losses[3])
-
                     disp[state].reset()
 
-                    # log images
-                    # test_images = give_me_visualization(model_G_rgb2raw, None, device, test_batch)
 
-                    test_images = give_me_visualization(model_rgb2raw=model_G_rgb2raw,
-                                        model_raw2rgb=None,
+                    test_images = give_me_visualization(model_A2B=model_G_A2B,
+                                        model_B2A=None,
                                         device=device, test_batch=test_batch, nomalize=True, beta_for_gamma=1/2.2)
 
-                    summary.add_image('Generated_pairs', test_images.permute(2,0,1), step)
+                    summary.add_image('Generated_pairs', test_images.permute(2,0,1), step[state])
+
         else:
-            if state=='valid':
-                loss_G_average = loss_G_total / len(dataloader[state])
-                print(f'best ckpt updated!!!  old best {loss_best_G_valid} vs new best {loss_G_average}')
-                if loss_best_G_valid > loss_G_average:
-                        loss_best_G_train = loss_G_average
-                        summary.add_scalar(f"loss_best_G{state}", loss_best_G_train, step)
-                        save_model(model_G_rgb2raw, model_D_raw, ckpt_path_name_best, epoch)
+
+            loss_G_average = loss_G_total[state] / nsteps[state]
+            if loss_best_G[state] > loss_G_average:
+                print(f'best {state} ckpt updated!!!  old best {loss_best_G[state]} vs new best {loss_G_average}')
+                loss_best_G[state] = loss_G_average
+                summary.add_scalar(f"loss_best_G{state}", loss_best_G[state], step[state])
+                save_model(model_G_A2B, ckpt_path_name_best, epoch, loss_best_G[state])
+
 
 
 
         # Step scheduler
         scheduler_G.step()
-        scheduler_D_rgb2raw.step()
 
 
         # Save checkpoint for every 5 epoch
         if epoch % 5 == 0:
-            save_model(model_G_rgb2raw, model_D_raw, ckpt_path_name, epoch)
+            save_model(model_G_A2B, ckpt_path_name, epoch, loss_G_train_last)
 
 
     print('done done')
@@ -399,9 +311,8 @@ if __name__ == '__main__':
     argparser.add_argument('--dataset_name', default='pixelshift', type=str,
                     choices=['sidd', 'pixelshift', 'apple2orange'],
                     help='(default=%(default)s)')
-    argparser.add_argument('--dataset_path', default=os.path.join('/home/team19/datasets'), type=str,
-                    help='(default=datasets')
-    argparser.add_argument('--model_sig', default="_hansol",
+    argparser.add_argument('--dataset_path', default='datasets', type=str, help='(default=datasets')
+    argparser.add_argument('--model_sig', default="_generation",
                     type=str, help='(default=model signature for same momdel different ckpt/log path)')
 
     argparser.add_argument('--device', default='cuda', type=str,
@@ -410,7 +321,7 @@ if __name__ == '__main__':
     argparser.add_argument('--input_size', type=int, help='input size', default=128)
     argparser.add_argument('--epoch', type=int, help='epoch number', default=200)
     argparser.add_argument('--lr', type=float, help='learning rate', default=1e-3)
-    argparser.add_argument('--batch_size', type=int, help='mini batch size', default=2)
+    argparser.add_argument('--batch_size', type=int, help='mini batch size', default=16)
     argparser.add_argument("--lambda_ide", type=float, default=10)
     argparser.add_argument("--lambda_generation", type=float, default=1)
     argparser.add_argument("--lambda_gan", type=float, default=100)

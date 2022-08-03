@@ -226,9 +226,8 @@ def train(args):
         print(f"\nEpoch {epoch}")
 
         loss_G_total = {'train':0, 'valid':0}
-        # loss_G_total_train = 0
-        # loss_G_total_valid = 0
-        for state in ['train', 'valid']:
+        # for state in ['train', 'valid']:
+        for state in ['train']:
             print('hello ', state)
             pbar = tqdm(dataloader[state])
             for idx, real_B in enumerate(pbar):
