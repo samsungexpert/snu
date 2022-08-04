@@ -149,7 +149,7 @@ def train(args):
     # visualize test images
     test_batch = next( iter(dataloader['test']))
 
-    logpath = os.path.join('runs', model_name+model_sig+'_'+model_type)
+    logpath = os.path.join('runs', model_name + '_' + model_type + model_sig)
     os.makedirs(logpath, exist_ok=True)
     summary = SummaryWriter(logpath)
     test_images = give_me_visualization(model_A2B=model_G_A2B,
@@ -312,7 +312,7 @@ if __name__ == '__main__':
                     choices=['sidd', 'pixelshift', 'apple2orange'],
                     help='(default=%(default)s)')
     argparser.add_argument('--dataset_path', default='datasets', type=str, help='(default=datasets')
-    argparser.add_argument('--model_sig', default="_generation",
+    argparser.add_argument('--model_sig', default="_gogo",
                     type=str, help='(default=model signature for same momdel different ckpt/log path)')
 
     argparser.add_argument('--device', default='cuda', type=str,
