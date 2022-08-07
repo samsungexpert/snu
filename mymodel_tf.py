@@ -12,11 +12,7 @@ TF_VER=1 if tf.__version__.split('.')[0]=='1' else (2 if tf.__version__.split('.
 def save_as_tflite(model, name='model'):
     model.save(name + '.h5')
 
-
-    if TF_VER == 1 :
-        converter = tf.lite.TFLiteConverter.from_keras_model_file(name+'h5')
-    else:
-        converter = tf.lite.TFLiteConverter.from_keras_model(model)
+    converter = tf.lite.TFLiteConverter.from_keras_model(model)
     tflite_model = converter.convert()
     open(name + '.tflite', 'wb').write(tflite_model)
 
@@ -59,10 +55,10 @@ class GenerationTF():
             self.model = self.bwunet()
         elif  model_name == 'unet':
             self.model = self.unet_generator()
-        elif model_name == 'reset_ed':
+        elif model_name == 'resnet_ed':
             self.model = self.resnet_ed()
         elif model_name == 'resnet_flat':
-            self.model = self.reset_flat()
+            self.model = self.resnet_flat()
         elif model_name == 'ae':
             self.model = self.ae()
         elif model_name == 'aet':
@@ -319,11 +315,11 @@ class GenerationTF():
 
 
 
-        out = tf.keras.layers.Conv2D(filters=nch,
+        out = tf.keras.layers.Conv2D(filters=3,
                                     kernel_size=(3, 3),
                                     strides=(1,1),
                                     padding='same',
-                                    activation='relu',
+                                    activation='tanh',
                                     name='last')(out)
 
         model = tf.keras.Model(inputs=input, outputs=out, name=f'resnet_flat_{nblocks}')

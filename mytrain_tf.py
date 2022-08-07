@@ -68,8 +68,7 @@ def main(args):
     input_max = args.input_max
     constraint = {'min_value': 0, 'max_value': constraint_max}
     model_name = args.model_name
-    use_bn = args.use_bn
-    add_noise_dec_input = args.add_noise_dec_input
+    data_path = args.data_path
 
 
 
@@ -124,27 +123,28 @@ def main(args):
     print('=========================================================')
     print('=========================================================')
     print('========================================================= NGPU', NGPU)
-    batch_size = 1 * NGPU # 128
-    batch_size = 1  # 128
-    batch_size_eval = 1 * 1 * NGPU
-    batch_size_viz = 4  # 128
+    batch_size = batch_size * NGPU  # 128
+    batch_size_eval = batch_size * NGPU
+    batch_size_viz = batch_size  # 128
+    print(batch_size, batch_size_eval, batch_size_viz)
+    # exit()
     train_params = {'filenames': train_files,
                     'mode': tf.estimator.ModeKeys.TRAIN,
-                    'threads': 4,
+                    'threads': 2,
                     'shuffle_buff': 100,
                     'batch': batch_size,
                     'input_type':input_type
                     }
     eval_params = {'filenames': eval_files,
                    'mode': tf.estimator.ModeKeys.EVAL,
-                   'threads': 4,
+                   'threads': 2,
                    'shuffle_buff': 100,
                    'batch': batch_size_eval,
                    'input_type': input_type}
 
     viz_params = {'filenames': viz_files,
                    'mode': tf.estimator.ModeKeys.EVAL,
-                   'threads': 4,
+                   'threads': 2,
                    'shuffle_buff': 100,
                    'batch': batch_size_viz,
                    'input_type': input_type}
@@ -168,6 +168,7 @@ def main(args):
     ## training gogo
     strategy = tf.distribute.MirroredStrategy()
     with strategy.scope():
+    # if True:
 
 
 
@@ -182,21 +183,12 @@ def main(args):
 
         bw = GenerationTF(model_name =  model_name)
 
-
-
-
-
         model = bw.model
+        # model.input.set_shape(1 + model.input.shape[1:])
 
-        model.input.set_shape(1 + model.input.shape[1:])
-
-
-
-
-        save_as_tflite(model, f'model_{model_name}')
         model.summary()
-
-
+        # save_as_tflite(model, f'model_{model_name}')
+        # exit()
 
         optimizer = tf.keras.optimizers.Adam(learning_rate=LEARNING_RATE, name='Adam')
         model.compile(optimizer=optimizer,  # 'adam',
@@ -263,7 +255,7 @@ def main(args):
                     verbose=1)
         ]
 
-        more_ckpt_ratio = 1
+        more_ckpt_ratio = 10
         model.fit(dataset_train,
                     epochs=INTERVAL*more_ckpt_ratio,
                     steps_per_epoch=(cnt_train // (batch_size*more_ckpt_ratio)) + 1,
@@ -319,12 +311,12 @@ if __name__ == '__main__':
             '--model_name',
             type=str,
             default='bwunet',
-            help='Networ model name, ')
+            help='resnet_flat, resnet_ed, bwunet, unet')
 
     parser.add_argument(
-            '--add_noise_dec_input',
+            '--data_path',
             type=str,
-            default='True',
+            default='/home/team19/datasets/pixelshift/tfrecords',
             help='add noise on dec input')
 
     args = parser.parse_args()
