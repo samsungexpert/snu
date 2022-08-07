@@ -404,5 +404,9 @@ if __name__ == '__main__':
     argparser.add_argument("--lambda_gan", type=float, default=100)
     argparser.add_argument("--lambda_cycle", type=float, default=5)
     argparser.add_argument("--identity", action="store_true")
+    argparser.add_argument("--gpunum", default="0", type=str,)
     args = argparser.parse_args()
+
+    os.environ["CUDA_VISIBLE_DEVICES"] = args.gpunum
+
     main(args)

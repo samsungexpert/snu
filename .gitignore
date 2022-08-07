@@ -9,6 +9,11 @@ runs
 datasets
 checkpoint
 inference
+model*
+*.json
+*.yaml
+*.tflite
+*.h5
 
 .DS_Store
 # C extensions

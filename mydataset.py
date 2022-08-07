@@ -150,7 +150,7 @@ def give_me_transform(type, mean=0.5, std=0.5):
     return transform
 
 
-def give_me_dataloader(dataset, batch_size:int, shuffle=True, num_workers=4, drop_last=False):
+def give_me_dataloader(dataset, batch_size:int, shuffle=True, num_workers=2, drop_last=False):
     return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers, drop_last=drop_last)
 
 
