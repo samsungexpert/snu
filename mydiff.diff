@@ -1,0 +1,123 @@
+diff --git a/mymodel_tf.py b/mymodel_tf.py
+index 64cf0ff..08ff2b5 100644
+--- a/mymodel_tf.py
++++ b/mymodel_tf.py
+@@ -230,7 +230,7 @@ class GenerationTF():
+                                             padding=padding, activation=None, name=name+'_tconv')(x)
+ 
+             if res != None:
+-                out = tf.keras.layers.add([out+res])
++                out = tf.keras.layers.add([out, res])
+                 out = tf.keras.layers.PReLU(shared_axes=[1,2], name=name+'_prelua')(out)
+ 
+             out = tf.keras.layers.Conv2D(filters=filters//2,  kernel_size=kernel_size, strides=1,
+diff --git a/mytrain_tf.py b/mytrain_tf.py
+index e2bec7e..0614b9d 100644
+--- a/mytrain_tf.py
++++ b/mytrain_tf.py
+@@ -11,7 +11,7 @@ import glob
+ import datetime
+ import numpy as np
+ 
+-
++from torch.utils.tensorboard import SummaryWriter
+ from myutils_tf import bwutils
+ # from tensorflow.keras import backend as K
+ import  tensorflow.keras.backend as K
+@@ -50,11 +50,6 @@ INTERVAL = 600
+ 
+ 
+ 
+-def init_variables():
+-    sess = tf.compat.v1.keras.backend.get_session()
+-    init = tf.compat.v1.global_variables_initializer()
+-    sess.run(init)
+-
+ 
+ def main(args):
+ 
+@@ -69,6 +64,7 @@ def main(args):
+     constraint = {'min_value': 0, 'max_value': constraint_max}
+     model_name = args.model_name
+     data_path = args.data_path
++    print('[BW] model_name = ', model_name)
+ 
+ 
+ 
+@@ -159,8 +155,8 @@ def main(args):
+ 
+     cnt_train = 92800
+     cnt_valid = 4800
+-    # cnt_train = 4
+-    # cnt_valid = 4
++    cnt_train = 4
++    cnt_valid = 4
+     cnt_viz = 4
+ 
+ 
+@@ -170,8 +166,6 @@ def main(args):
+     with strategy.scope():
+     # if True:
+ 
+-
+-
+         if input_type not in ['shrink', 'nonshrink', 'nonshrink_4ch', 'rgb']:
+             raise ValueError('unkown input_type, ', input_type)
+ 
+@@ -182,12 +176,8 @@ def main(args):
+         #####################
+ 
+         bw = GenerationTF(model_name =  model_name)
+-
+         model = bw.model
+-        # model.input.set_shape(1 + model.input.shape[1:])
+-
+         model.summary()
+-        # save_as_tflite(model, f'model_{model_name}')
+         # exit()
+ 
+         optimizer = tf.keras.optimizers.Adam(learning_rate=LEARNING_RATE, name='Adam')
+@@ -234,7 +224,7 @@ def main(args):
+         os.makedirs(tensorboard_dir, exist_ok=True)
+ 
+         from myutils_tf import TensorBoardImage
+-        image_callback =TensorBoardImage( log_dir=os.path.join(model_dir, 'board'),
++        image_callback = TensorBoardImage( log_dir=os.path.join(model_dir, 'board'),
+                                         dataloader = dataset_viz,
+                                         patch_size = 128,
+                                         cnt_viz = cnt_viz)
+@@ -251,6 +241,8 @@ def main(args):
+                     # the `val_loss` score has improved.
+                     save_best_only=True,
+                     save_weights_only=False,
++                    # mode='max',
++                    save_freq='epoch',
+                     monitor='val_loss',  # 'val_mse_yuv_loss',
+                     verbose=1)
+         ]
+@@ -301,22 +293,17 @@ if __name__ == '__main__':
+             default=128,
+             help='input patch size')
+ 
+-    parser.add_argument(
+-            '--use_bn',
+-            type=str,
+-            default='True',
+-            help='use batch normalization on the enc output')
+-
+     parser.add_argument(
+             '--model_name',
+             type=str,
+-            default='bwunet',
++            default='resnet_flat',
+             help='resnet_flat, resnet_ed, bwunet, unet')
+ 
+     parser.add_argument(
+             '--data_path',
+             type=str,
+-            default='/home/team19/datasets/pixelshift/tfrecords',
++            # default='/home/team19/datasets/pixelshift/tfrecords',
++            default='datasets/pixelshift/tfrecords',
+             help='add noise on dec input')
+ 
+     args = parser.parse_args()
