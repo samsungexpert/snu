@@ -10,6 +10,7 @@ TF_VER=1 if tf.__version__.split('.')[0]=='1' else (2 if tf.__version__.split('.
 
 
 def save_as_tflite(model, name='model'):
+    model.input.set_shape(1 + model.input.shape[1:])
     model.save(name + '.h5')
 
     converter = tf.lite.TFLiteConverter.from_keras_model(model)
@@ -68,8 +69,6 @@ class GenerationTF():
 
 
 
-
-
     def _myactivation_layer(self, activation='relu'):
         if activation.lower() == 'relu':
             activation_layer = tf.keras.layers.ReLU()
@@ -81,17 +80,7 @@ class GenerationTF():
 
 
     def _mynorm(self, x, type, nblock, num):
-        # out = x
-        # if type == 'batch':
-        #     out = tf.keras.layers.BatchNormalization(name=f'enc_bnorm_{nblock}_{num}')(x)
-        # elif type == 'instance':
-        #     out = tfa.layers.InstanceNormalization(name=f'enc_inorm_{nblock}_{num}')(x)
-        # elif type == None:
-        #     out = x
-        # else:
-        #     ValueError('Undefined normalization type, ', type)
         out = self._mynorm_layer(type)(x)
-
         return out
 
     def _mynorm_layer(self, type, name=None):
@@ -506,25 +495,15 @@ class GenerationTF():
 
 def main():
 
-    use_bn = False
-    use_noise = True
-
-    bw = vae(use_bn=use_bn, add_noise_dec_input=use_noise)
 
 
+    model_name = 'resnet_ed'
+    # model_name = 'resnet_flat'
+    # model_name = 'bwunet'
+    # model_net = 'unet'
 
-
-    bw.model_aet.save('ae_bn.h5')
-    bw.model_ae_delta.save('ae_delta.h5')
-    # bw.model_vae_delta.save('vae_delta.h5')
-    # save_as_tflite(bw.model_ae, name='ae')
-    # save_as_tflite(bw.model_ae_delta, name='ae_delta')
-    # save_as_tflite(bw.model_vae_delta, name='vae_delta')
-
-
-
-    # save_as_tflite(bw.model_ae, name=('ae_delta_bn_%r_nose_%r'%(use_bn, use_noise)))
-    save_as_tflite(bw.model_aet, name=('model_aet%r_nose_%r' % (use_bn, use_noise)))
+    bw = GenerationTF(model_name =  model_name)
+    save_as_tflite(bw.model, name=f'model_{model_name}' )
 
 
 

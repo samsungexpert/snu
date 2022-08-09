@@ -121,21 +121,21 @@ def main(args):
     train_params = {'filenames': train_files,
                     'mode': tf.estimator.ModeKeys.TRAIN,
                     'threads': 2,
-                    'shuffle_buff': 100,
+                    'shuffle_buff': 128,
                     'batch': batch_size,
                     'input_type':input_type
                     }
     eval_params = {'filenames': eval_files,
                    'mode': tf.estimator.ModeKeys.EVAL,
                    'threads': 2,
-                   'shuffle_buff': 100,
+                   'shuffle_buff': 128,
                    'batch': batch_size_eval,
                    'input_type': input_type}
 
     viz_params = {'filenames': viz_files,
                    'mode': tf.estimator.ModeKeys.EVAL,
                    'threads': 2,
-                   'shuffle_buff': 100,
+                   'shuffle_buff': 128,
                    'batch': batch_size_viz,
                    'input_type': input_type}
 
@@ -235,6 +235,7 @@ if __name__ == '__main__':
             '--batch_size',
             type=int,
             default=16,
+            # default=1,
             help='input patch size')
 
     parser.add_argument(

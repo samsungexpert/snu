@@ -4,7 +4,7 @@ import os
 import glob
 import tensorflow as tf
 import numpy as np
-
+from functools import partial
 
 from tensorflow.keras.callbacks import Callback
 import numpy as np
@@ -92,11 +92,8 @@ class bwutils():
 
 
         for lt  in loss_type:
-            if lt not in ['rgb', 'yuv', 'ploss', 'ssim', 'boundary_ploss']:
+            if lt not in ['rgb', 'yuv', 'ploss', 'ssim']:
                 raise ValueError('unknown loss type, ', lt)
-
-
-
 
         self.cfa_pattern = cfa_pattern
         self.patch_size = patch_size
@@ -173,17 +170,7 @@ class bwutils():
                                           self.idx_G2[..., np.newaxis]), axis=-1)
 
 
-        if 'boundary_ploss' in loss_type:
-            vgg16=tf.keras.applications.vgg16.VGG16(weights='imagenet', include_top=False, input_shape=[crop_size,crop_size,3])
-            loss_model=tf.keras.models.Model(inputs=vgg16.input, outputs=vgg16.get_layer('block1_conv2').output)
-            loss_model.trainable=False
-            self.loss_model = loss_model
-
-            self.ploss_scaling_factor_bloss = 1.5e-3 / 64
-            if loss_mode == '1norm':
-                self.ploss_scaling_factor_bloss = np.sqrt(1.5e-3 / 64) #tf.keras.backend.sqrt(self.ploss_scaling_factor_bloss)
-
-        elif 'ploss' in loss_type:
+        if 'ploss' in loss_type:
             vgg = tf.keras.applications.vgg16.VGG16(include_top=False, weights='imagenet',
                                                     input_shape=[crop_size,crop_size,3])
             loss_model = tf.keras.models.Model(inputs=vgg.input, outputs=vgg.get_layer('block2_conv2').output)
@@ -197,9 +184,6 @@ class bwutils():
             if loss_mode == '1norm':
                 self.ploss_scaling_factor = np.sqrt(4. / 162.5625) # tf.keras.backend.sqrt(self.ploss_scaling_factor)
 
-
-
-
         print('[bwutils] input_type', input_type)
         print('[bwutils] output_type', output_type)
         print('[bwutils] cfa_pattern', cfa_pattern)
@@ -211,6 +195,7 @@ class bwutils():
         print('[bwutils] loss_mode', loss_mode, self.loss_norm)
         print('[bwutils] loss_scale', loss_scale)
         print('[bwutils] cache_enable', cache_enable)
+
 
     def serving_input_receiver_fn(self):
         """
@@ -227,6 +212,7 @@ class bwutils():
         features = reciever_tensors
         return tf.estimator.export.ServingInputReceiver(receiver_tensors=reciever_tensors,
                                                         features=features)
+
 
     def save_models(self, model, path, order):
         # init_variables()
@@ -258,20 +244,11 @@ class bwutils():
         open(path + '.json', 'w').write(model_json)
 
 
-
-
-
-
     def data_augmentation(self, image):
         image = tf.image.random_flip_left_right(image)
         image = tf.image.random_flip_up_down(image)
         image = tf.image.rot90(image, np.random.randint(4))
         return image
-
-
-
-
-
 
 
     def get_image_from_single_example(self, example, key='image', num_channels=3, dtype='uint16'):
@@ -287,19 +264,20 @@ class bwutils():
         image = tf.cast(image, tf.float32)
         image = tf.reshape(image, [patch_size, patch_size, num_channels])
 
-
-
         return image
+
 
     def get_patternized_1ch_raw_image(self, image):
         patternized = self.get_patternized_3ch_image(image)
         patternized = tf.expand_dims(tf.reduce_sum(patternized, axis=-1), axis=-1)
         return patternized
 
+
     def get_patternized_3ch_image(self, image):
         tf_RGB = tf.constant(self.idx_RGB, dtype=tf.float32)
         patternized = tf.math.multiply(image[...,:3], tf_RGB)
         return patternized
+
 
     def get_patternized_4ch_image(self, image, is_shrink=True):
 
@@ -339,24 +317,13 @@ class bwutils():
 
 
     def resize_to_scale_factor(self, image, crop_size_resized):
-        print('crop_size_resized', crop_size_resized)
-        if TF_VER == 1:
-            image_resized = tf.image.resize(image,
-                                            [crop_size_resized, crop_size_resized],
-                                            method=self.upscaling_method,
-                                            align_corners=True,
-                                            preserve_aspect_ratio=True)
-        elif TF_VER == 2:
-            image_resized = tf.image.resize(image,
-                                            [crop_size_resized, crop_size_resized],
-                                            method=self.upscaling_method,
-                                            preserve_aspect_ratio=True,
-                                            antialias=True)
-        else:
-            ValueError('unknown tf version, ', TF_VER)
-
+        # print('crop_size_resized', crop_size_resized)
+        image_resized = tf.image.resize(image,
+                                        [crop_size_resized, crop_size_resized],
+                                        method=self.upscaling_method,
+                                        preserve_aspect_ratio=True,
+                                        antialias=True)
         return image_resized
-
 
 
     def get_patternized(self, image, input_type):
@@ -408,27 +375,13 @@ class bwutils():
         image = image ** gammas
         return image
 
-    def gamma_and_normalize(self, image):
-        image_gamma = self.gamma(image)
 
-        if self.input_bias:
-            image       = (image       - 0.5) * 2.
-            image_gamma = (image_gamma - 0.5) * 2.
-
-            image = tf.clip_by_value(image, -1, 1)
-            image_gamma = tf.clip_by_value(image_gamma, -1, 1)
-        else:
-            image = tf.clip_by_value(image, 0, 1)
-            image_gamma = tf.clip_by_value(image_gamma, 0, 1)
-        return image_gamma, image
-
-    def parse_tfrecord(self, example):
+    def parse_tfrecord(self, example, mode):
 
         image = self.get_image_from_single_example(example, key='image', num_channels=3)
-        image = self.data_augmentation(image)
-        # patternized, image = self.get_patternized(image, self.input_type)
+        if mode == tf.estimator.ModeKeys.TRAIN:
+            image = self.data_augmentation(image)
 
-        # image_gamma, image = self.gamma_and_normalize(image)
         image = self.scale_by_input_max(image)
         image = tf.clip_by_value(image, 0, 1)
         image_gamma = self.gamma(image)
@@ -436,7 +389,6 @@ class bwutils():
         if self.input_bias:
             image       = (image       - 0.5) * 2.
             image_gamma = (image_gamma - 0.5) * 2.
-
 
         return image_gamma, image
 
@@ -448,7 +400,7 @@ class bwutils():
         if self.cache_enable is True:
             dataset = dataset.cache()
 
-        dataset = dataset.map(self.parse_tfrecord, num_parallel_calls=tf.data.experimental.AUTOTUNE)
+        dataset = dataset.map(partial(self.parse_tfrecord, mode=params['mode']), num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
         if params['mode'] == tf.estimator.ModeKeys.TRAIN:
             dataset = dataset.shuffle(params['shuffle_buff']).repeat()
@@ -458,6 +410,7 @@ class bwutils():
         # dataset = dataset.prefetch(8 * params['batch'])
 
         return dataset
+
 
     def loss_fn(self, y_true, y_pred):
 
@@ -479,22 +432,12 @@ class bwutils():
         return loss * self.loss_scale
 
 
-
     def loss_fn_mse_rgb(self, y_true, y_pred):
-        # y_true_rgb = self.scale_by_input_max(y_true)
-        # y_pred_rgb = self.scale_by_input_max(y_pred)
-        # rgb_mse_loss = tf.keras.backend.mean(self.loss_norm(y_true_rgb - y_pred_rgb))
         rgb_mse_loss = tf.keras.backend.mean(self.loss_norm(y_true - y_pred))
         return rgb_mse_loss
 
 
     def loss_fn_mse_yuv(self, y_true, y_pred):
-        # y_true_rgb = self.scale_by_input_max(y_true)
-        # y_pred_rgb = self.scale_by_input_max(y_pred)
-
-        # y_true_yuv = tf.image.rgb_to_yuv(y_true_rgb)
-        # y_pred_yuv = tf.image.rgb_to_yuv(y_pred_rgb)
-
         y_true_yuv = tf.image.rgb_to_yuv(y_true)
         y_pred_yuv = tf.image.rgb_to_yuv(y_pred)
 
@@ -505,15 +448,8 @@ class bwutils():
 
         return yuv_mse_loss
 
+
     def loss_fn_mse_rgb_yuv(self, y_true, y_pred):
-
-        # y_true_rgb = self.scale_by_input_max(y_true)
-        # y_pred_rgb = self.scale_by_input_max(y_pred)
-
-        # y_true_yuv = tf.image.rgb_to_yuv(y_true_rgb)
-        # y_pred_yuv = tf.image.rgb_to_yuv(y_pred_rgb)
-        # rgb_mse_loss = tf.keras.backend.mean(self.loss_norm(y_true_rgb - y_pred_rgb))
-
         y_true_yuv = tf.image.rgb_to_yuv(y_true)
         y_pred_yuv = tf.image.rgb_to_yuv(y_pred)
 
@@ -537,15 +473,9 @@ class bwutils():
 
         return vgg16_perceptual_loss * self.ploss_scaling_factor
 
+
     def loss_fn_ssim(self, y_true, y_pred):
-
-        # y_true_rgb = self.scale_by_input_max(y_true)
-        # y_pred_rgb = self.scale_by_input_max(y_pred)
-
-        # ssim_loss = 1. - tf.image.ssim(y_true_rgb, y_pred_rgb, 1)
-
         ssim_loss = 1. - tf.image.ssim(y_true, y_pred, 1)
-
         return ssim_loss
 
 
