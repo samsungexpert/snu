@@ -1,0 +1,11 @@
+ CUDA_VISIBLE_DEVICES=5 python mytrain_gan_pixelshift.py --dataset_path=/home/team19/datasets --batch_size=8 --epoch=200 --model_name=bwunet 
+ CUDA_VISIBLE_DEVICES=6 python mytrain_gan_pixelshift.py --dataset_path=/home/team19/datasets --batch_size=8 --epoch=200 --model_name=unet 
+ CUDA_VISIBLE_DEVICES=7 python mytrain_gan_pixelshift.py --dataset_path=/home/team19/datasets --batch_size=8 --epoch=200 --model_name=resnet 
+ 
+ CUDA_VISIBLE_DEVICES=7 python mytrain_generative_pixelshift.py --dataset_path=/home/team19/datasets --batch_size=8 --epoch=200 --model_name=bwunet 
+ 
+ 
+ CUDA_VISIBLE_DEVICES=0 python mytrain_tf.py --batch_size=16 --model_name=bwunet
+ CUDA_VISIBLE_DEVICES=1 python mytrain_tf.py --batch_size=128 --model_name=resnet_ed
+ CUDA_VISIBLE_DEVICES=2 python mytrain_tf.py --batch_size=16 --model_name=resnet_flat
+ CUDA_VISIBLE_DEVICES=3 python mytrain_tf.py --batch_size=16 --model_name=unet

@@ -11,25 +11,17 @@ import glob
 import datetime
 import numpy as np
 
+# from torch.utils.tensorboard import SummaryWriter
 
-from myutils_tf import bwutils
-# from tensorflow.keras import backend as K
-import  tensorflow.keras.backend as K
+from myutils_tf import bwutils, get_training_callbacks, load_checkpoint_if_exists
 
 from mymodel_tf import save_as_tflite, GenerationTF
 
-
+# os.environ["CUDA_VISIBLE_DEVICES"]='-1'
 # To use limit number of GPU
 # os.environ["CUDA_VISIBLE_DEVICES"] = "2,3"
 
-# tf.compat.v1.disable_eager_execution()
-TF_VER=1 if tf.__version__.split('.')[0]=='1' else (2 if tf.__version__.split('.')[0]=='2' else None)
 
-# if TF_VER == 2:
-#     tf.compat.v1.disable_eager_execution()
-
-def mse_4d(y_true, y_pred):
-    return K.mean(K.square(y_pred - y_true), axis=(1,2,3))
 
 def get_available_gpus():
     local_device_protos = device_lib.list_local_devices()
@@ -74,7 +66,8 @@ def main(args):
 
     # loss_type = ['rgb', 'yuv', 'ploss'] # 'rgb', 'yuv', 'ploss'
     loss_type = ['rgb', 'yuv']  # 'rgb', 'yuv', 'ploss
-    loss_type = ['rgb']  # 'rgb', 'yuv', 'ploss
+    # loss_type = ['rgb']  # 'rgb', 'yuv', 'ploss
+    # loss_type = ['yuv']
 
     # get util class
     utils = bwutils(input_type,
@@ -87,20 +80,16 @@ def main(args):
                     cache_enable=False)
 
 
-    ## model file and model_dir
-    model_file_name = f'{model_name}_{patch_size}x{patch_size}'
+
+    base_path = 'model_dir'
+    os.makedirs(base_path, exist_ok=True)
+    model_dir = os.path.join(base_path, 'checkpoint', model_name)
 
 
-    model_dir = 'model_dir_' + model_file_name
-    print('model_dir = ', model_dir)
-    os.makedirs(model_dir, exist_ok=True)
-    os.makedirs(model_dir + '/models', exist_ok=True)
-
-    model_file_full_path = os.path.join(model_dir, model_file_name)
 
     ## dataset
-    data_path = '/dataset/MIT/tfrecords_data_only'
-    data_path = 'datasets/pixelshift/tfrecords'
+    # data_path = '/dataset/MIT/tfrecords_data_only'
+    # data_path = 'datasets/pixelshift/tfrecords'
     # data_path = '/home/team19/datasets/pixelshift/tfrecords'
 
     def get_tfrecords(path, keyword):
@@ -126,6 +115,7 @@ def main(args):
     batch_size = batch_size * NGPU  # 128
     batch_size_eval = batch_size * NGPU
     batch_size_viz = batch_size  # 128
+    batch_size_viz = 10
     print(batch_size, batch_size_eval, batch_size_viz)
     # exit()
     train_params = {'filenames': train_files,
@@ -153,15 +143,17 @@ def main(args):
     dataset_eval = utils.dataset_input_fn(eval_params)
     dataset_viz = utils.dataset_input_fn(viz_params)
 
-    print('train set len : ', tf.data.experimental.cardinality(dataset_train))
-    print('train set len : ', dataset_train.element_spec)
+    # print('train set len : ', tf.data.experimental.cardinality(dataset_train))
+    # print('train set len : ', dataset_train.element_spec)
 
 
     cnt_train = 92800
     cnt_valid = 4800
-    # cnt_train = 4
-    # cnt_valid = 4
-    cnt_viz = 4
+    # cnt_train = 256
+    # cnt_valid = 64
+    # cnt_train = 8
+    # cnt_valid = 8
+    cnt_viz = 10
 
 
     #########################
@@ -170,25 +162,20 @@ def main(args):
     with strategy.scope():
     # if True:
 
-
-
         if input_type not in ['shrink', 'nonshrink', 'nonshrink_4ch', 'rgb']:
             raise ValueError('unkown input_type, ', input_type)
 
-
-
         #####################
-        #####################
+        ## Get model gogo
         #####################
 
         bw = GenerationTF(model_name =  model_name)
 
         model = bw.model
-        # model.input.set_shape(1 + model.input.shape[1:])
-
+        if False:
+            model.input.set_shape(1 + model.input.shape[1:]) # to freeze model
+        model.save(os.path.join(base_path, 'checkpoint' , f'{model_name}_model_structure.h5'), include_optimizer=False)
         model.summary()
-        # save_as_tflite(model, f'model_{model_name}')
-        # exit()
 
         optimizer = tf.keras.optimizers.Adam(learning_rate=LEARNING_RATE, name='Adam')
         model.compile(optimizer=optimizer,  # 'adam',
@@ -196,66 +183,21 @@ def main(args):
                     metrics=[utils.loss_fn])
 
 
-
-        ## load designaged trained model
-        trained_model_file_name = '01646_2.23672e-03.h5'
-
-
-        trained_model_file_name = os.path.join(model_dir, trained_model_file_name)
-        if os.path.isfile(trained_model_file_name):
-            print('=============> load pre trained mode: ', trained_model_file_name)
-            model.load_weights(trained_model_file_name)
-        else:
-            print('=============> pre trained model not exists ')
-            # raise ValueError('unkown trained weight', trained_model_file_name)
-
-
-        # load previous trained model if exist
+        ## load pre-trained model
+        trained_model_file_name = '00003_resnet_flat_2.89940e-09_1.h5'
+        model, prev_epoch = load_checkpoint_if_exists(model, model_dir, model_name, trained_model_file_name)
         prev_epoch=0
 
-        trained_weights = glob.glob(os.path.join(model_dir, 'models/*.h5' ))
-        print('--=-=-=-> ', trained_weights)
-        if len(trained_weights ) > 0:
-            print('===========> %d TRAINED WEIGHTS EXIST' % len(trained_weights))
-            trained_weights.sort()
-            trained_weights = trained_weights[-1]
-            model.load_weights(trained_weights)
-            idx = trained_weights.rfind('models')
-            prev_epoch = int(trained_weights[idx+7:idx+7+5])
-            print('prev epoch', prev_epoch)
-        else:
-            print('===========> TRAINED WEIGHTS NOT EXIST', len(trained_weights))
+
+        ## callbacks for training loop
+        callbacks = get_training_callbacks(['ckeckpoint', 'tensorboard', 'image'],
+                                            base_path=base_path, model_name=model_name,
+                                            dataloader=dataset_viz, cnt_viz=cnt_viz )
 
 
-        model.save(model_dir + '/model_structure.h5', include_optimizer=False)
 
-        # call backs
-        tensorboard_dir = os.path.join(model_dir, 'board')
-        os.makedirs(tensorboard_dir, exist_ok=True)
-
-        from myutils_tf import TensorBoardImage
-        image_callback =TensorBoardImage( log_dir=os.path.join(model_dir, 'board'),
-                                        dataloader = dataset_viz,
-                                        patch_size = 128,
-                                        cnt_viz = cnt_viz)
-
-        callbacks = [  # SaveBestCallback(), # MyCustomCallback(),
-            image_callback,
-            tf.keras.callbacks.TensorBoard(log_dir=model_dir + '/board',
-                                        histogram_freq=2,
-                                        write_graph=True,
-                                        write_images=False,
-                                        ),
-            tf.keras.callbacks.ModelCheckpoint(
-                    filepath=model_dir + '/models/{epoch:05d}_%s_{loss:.5e}_1.h5' % (MODEL_NAME),
-                    # the `val_loss` score has improved.
-                    save_best_only=True,
-                    save_weights_only=False,
-                    monitor='val_loss',  # 'val_mse_yuv_loss',
-                    verbose=1)
-        ]
-
-        more_ckpt_ratio = 10
+        # train gogo
+        more_ckpt_ratio = 1
         model.fit(dataset_train,
                     epochs=INTERVAL*more_ckpt_ratio,
                     steps_per_epoch=(cnt_train // (batch_size*more_ckpt_ratio)) + 1,
@@ -292,7 +234,7 @@ if __name__ == '__main__':
     parser.add_argument(
             '--batch_size',
             type=int,
-            default=8,
+            default=16,
             help='input patch size')
 
     parser.add_argument(
@@ -310,13 +252,14 @@ if __name__ == '__main__':
     parser.add_argument(
             '--model_name',
             type=str,
-            default='bwunet',
+            default='resnet_flat',
             help='resnet_flat, resnet_ed, bwunet, unet')
 
     parser.add_argument(
             '--data_path',
             type=str,
             default='/home/team19/datasets/pixelshift/tfrecords',
+            # default='datasets/pixelshift/tfrecords',
             help='add noise on dec input')
 
     args = parser.parse_args()

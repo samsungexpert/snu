@@ -230,7 +230,7 @@ class GenerationTF():
                                             padding=padding, activation=None, name=name+'_tconv')(x)
 
             if res != None:
-                out = tf.keras.layers.add([out+res])
+                out = tf.keras.layers.Add()([out, res])
                 out = tf.keras.layers.PReLU(shared_axes=[1,2], name=name+'_prelua')(out)
 
             out = tf.keras.layers.Conv2D(filters=filters//2,  kernel_size=kernel_size, strides=1,
@@ -293,7 +293,7 @@ class GenerationTF():
         out = tf.keras.layers.Conv2D(filters=nch, kernel_size=(3, 3), strides=(1, 1),
                                     padding='same', activation=None, name=f'{ctype}_conv_{nblock}_2')(out)
         out = self._mynorm(out, norm, nblock, 2)
-        out = tf.keras.layers.add([x, out])
+        out = tf.keras.layers.Add()([x, out])
         out = tf.keras.layers.ReLU(name=f'{ctype}_relu_{nblock}_2')(out)
 
         return out
