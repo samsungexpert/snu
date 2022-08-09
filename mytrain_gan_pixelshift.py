@@ -8,6 +8,12 @@ import numpy as np
 from tqdm import tqdm
 from torch import nn, optim
 
+
+# CUDA_VISIBLE_DEVICES=5 python mytrain_gan_pixelshift.py --dataset_path=/home/team19/datasets --batch_size=8 --epoch=200 --model_name=bwunet
+# CUDA_VISIBLE_DEVICES=6 python mytrain_gan_pixelshift.py --dataset_path=/home/team19/datasets --batch_size=8 --epoch=200 --model_name=unet
+# CUDA_VISIBLE_DEVICES=7 python mytrain_gan_pixelshift.py --dataset_path=/home/team19/datasets --batch_size=8 --epoch=200 --model_name=resnet
+
+
 # from util.visualizer import Visualizer
 from mymodel import mygen_model, mydisc_model, set_requires_grad
 from myutils import LossDisplayer
@@ -379,7 +385,8 @@ if __name__ == '__main__':
     argparser.add_argument('--dataset_name', default='pixelshift', type=str,
                     choices=['sidd', 'pixelshift', 'apple2orange'],
                     help='(default=%(default)s)')
-    argparser.add_argument('--dataset_path', '/data/team19', type=str,
+    argparser.add_argument('--dataset_path', default='/data/team19', type=str,
+    # argparser.add_argument('--dataset_path', default='datasets', type=str,
                     help='(default=datasets')
     argparser.add_argument('--model_sig', default="_damn",
                     type=str, help='(default=model signature for same momdel different ckpt/log path)')
