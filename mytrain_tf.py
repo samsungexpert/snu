@@ -77,6 +77,7 @@ def main(args):
                     input_max=input_max,
                     loss_type=loss_type, # 'rgb', 'yuv', 'ploss'
                     loss_mode='2norm',
+                    loss_scale=1e4,
                     cache_enable=False)
 
 
