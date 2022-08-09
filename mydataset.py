@@ -171,7 +171,8 @@ class SingleDataset(DataLoader):
     def __getitem__(self, index):
         if self.image_path[index].split('.')[-1] == 'npy':
             item = np.load(self.image_path[index]).astype(np.float32)/self.max_val
-            item = np.clip(item[...,(0,1,3)].astype(np.uint8), 0, 255)
+            # item = np.clip(item[...,(0,1,3)].astype(np.uint8), 0, 255)
+            item = np.clip(item.astype(np.uint8), 0, 255)
             item = self.transform(Image.fromarray(item))
         else:
             item = self.transform(Image.open(self.image_path[index]))

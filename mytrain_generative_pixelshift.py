@@ -75,16 +75,16 @@ def train(args):
     print('base_path: ', base_path)
 
     # path
-    mytype = 'C'
-    train_path = os.path.join(base_path, 'train'+mytype)
-    valid_path = os.path.join(base_path, 'valid'+mytype)
-    test_path  = os.path.join(base_path, 'test' +mytype)
-    viz_path   = os.path.join(base_path, 'viz' +mytype)
+    mytype = 'C_3ch'
+    train_path = os.path.join(base_path, 'train'+ mytype)
+    valid_path = os.path.join(base_path, 'valid'+ mytype)
+    test_path  = os.path.join(base_path, 'viz'  + mytype)
+    viz_path   = os.path.join(base_path, 'viz'  + mytype)
 
 
     mydata_path = {'train': train_path,
-                   'valid': test_path, #valid_path,
-                   'test' : viz_path,  #test_path,
+                   'valid': valid_path,
+                   'test' : test_path,
                    'viz'  : viz_path}
     for k,v in mydata_path.items():
         print(k,' : ', v)
@@ -94,14 +94,14 @@ def train(args):
     transform = {'train': give_me_transform('train'),
                  'valid': give_me_transform('valid'),
                  'test' : give_me_transform('test'),
-                 'viz' : give_me_transform('viz')}
+                 'viz'  : give_me_transform('viz')}
 
     # dataloader
     BITS = 14
     dataloader = {'train': give_me_dataloader(SingleDataset(mydata_path['train'], transform['train'], bits=BITS), batch_size),
                   'valid': give_me_dataloader(SingleDataset(mydata_path['valid'], transform['valid'], bits=BITS), batch_size),
                   'test' : give_me_dataloader(SingleDataset(mydata_path['test'],  transform['test'] , bits=BITS), batch_size),
-                  'viz'  : give_me_dataloader(SingleDataset(mydata_path['test'],  transform['viz']  , bits=BITS), batch_size=2) }
+                  'viz'  : give_me_dataloader(SingleDataset(mydata_path['viz'],   transform['viz']  , bits=BITS), batch_size=2) }
 
 
     nsteps={}
@@ -114,11 +114,11 @@ def train(args):
 
 
     ## ckpt save load if any
-    ckpt_path_name = f'checkpoint/{model_type}/{dataset_name}'
+    ckpt_path_name      = f'checkpoint/{model_type}/{dataset_name}'
+    ckpt_path_name      = os.path.join(ckpt_path_name, model_name+model_sig)
     ckpt_path_name_best = os.path.join(ckpt_path_name, model_name+model_sig+'_best')
-    ckpt_path_name = os.path.join(ckpt_path_name, model_name+model_sig)
 
-    os.makedirs(ckpt_path_name, exist_ok=True)
+    os.makedirs(ckpt_path_name,      exist_ok=True)
     os.makedirs(ckpt_path_name_best, exist_ok=True)
 
     ckpt_list = os.listdir(ckpt_path_name)
@@ -142,8 +142,8 @@ def train(args):
 
     ## save onnx
     dummy_input_G = torch.randn(1, 3, 256, 256, device=device)
-
-    torch.onnx.export(model_G_A2B.eval(), dummy_input_G, f"Generation_{model_name + model_sig}_{model_type}.onnx")
+    torch.onnx.export(model_G_A2B.eval(), dummy_input_G,
+                os.path.join('checkpoint', model_type, f"Generation_{model_name + model_sig}_{model_type}.onnx"))
 
 
     # visualize test images
@@ -159,7 +159,7 @@ def train(args):
     # plt.imshow(test_images)
     # plt.title('Real RGB \t Real RAW \n Fake RGB \t Fake RAW')
     # plt.show()
-
+    # exit()
 
 
     # make model in training mode
@@ -311,7 +311,7 @@ if __name__ == '__main__':
     argparser.add_argument('--dataset_name', default='pixelshift', type=str,
                     choices=['sidd', 'pixelshift', 'apple2orange'],
                     help='(default=%(default)s)')
-    argparser.add_argument('--dataset_path', default='datasets', type=str, help='(default=datasets')
+    argparser.add_argument('--dataset_path', default='/data/team19', type=str, help='(default=datasets')
     argparser.add_argument('--model_sig', default="_gogo",
                     type=str, help='(default=model signature for same momdel different ckpt/log path)')
 
