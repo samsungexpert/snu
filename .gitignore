@@ -14,6 +14,8 @@ model*
 *.yaml
 *.tflite
 *.h5
+*.npy
+
 
 .DS_Store
 # C extensions

@@ -150,10 +150,78 @@ def give_me_transform(type, mean=0.5, std=0.5):
     return transform
 
 
+class Flip:
+    def __init__(self, axis):
+        self.axis = axis
+    def __call__(self, x):
+        # print('x.shape', x.shape)
+        return np.flip(x, self.axis).copy()
+
+class Rot90:
+    def __init__(self):
+        ...
+    def __call__(self, x):
+        return np.rot90(x, np.random.randint(4)).copy()
+
+class Normalization():
+    def __init__(self, bits=16, mean=0.5, std=0.5):
+        self.maxval = (2**bits) -1
+        self.mean = mean
+        self.std = std
+    def __call__(self, x):
+        x = x.astype(np.float32) / self.maxval
+        x = (x - self.mean) / self.std
+        return x.copy()
+
+
+def give_me_transform2(type, mean=0.5, std=0.5, isnpy=False, bits=16):
+
+    transform = None
+    if isnpy == True:
+        maxval = (2**bits) - 1
+
+
+        if type == 'train':
+            transform = transforms.Compose([
+                transforms.Lambda(Flip(0)),
+                transforms.Lambda(Flip(1)),
+                transforms.Lambda(Rot90()),
+                transforms.Lambda(Normalization(bits, mean, std)),
+
+            ])
+        else:
+            transform = transforms.Compose([
+                transforms.Lambda(Normalization(bits, mean, std)),
+            ])
+
+        return transform
+    else:
+        if type == 'train':
+            transform = transforms.Compose(
+                [
+                    # transforms.Resize((args.size, args.size)),
+                    transforms.RandomHorizontalFlip(),
+                    transforms.RandomVerticalFlip(),
+                    transforms.ToTensor(),
+                    transforms.Normalize(mean=(mean, mean, mean), std=(std, std, std)),
+                ]
+            )
+        else:
+            transform = transforms.Compose(
+                [
+                    transforms.ToTensor(),
+                    transforms.Normalize(mean=(mean, mean, mean), std=(std, std, std)),
+                ]
+            )
+    return transform
+
+
+# dataloader
 def give_me_dataloader(dataset, batch_size:int, shuffle=True, num_workers=2, drop_last=False):
     return DataLoader(dataset, batch_size=batch_size, shuffle=shuffle, num_workers=num_workers, drop_last=drop_last)
 
 
+# dataset
 class SingleDataset(DataLoader):
     def __init__(self, dataset_dir, transforms, mylen=-1, bits=8):
         self.dataset_dir = dataset_dir
@@ -170,10 +238,8 @@ class SingleDataset(DataLoader):
 
     def __getitem__(self, index):
         if self.image_path[index].split('.')[-1] == 'npy':
-            item = np.load(self.image_path[index]).astype(np.float32)/self.max_val
-            # item = np.clip(item[...,(0,1,3)].astype(np.uint8), 0, 255)
-            item = np.clip(item.astype(np.uint8), 0, 255)
-            item = self.transform(Image.fromarray(item))
+            item = np.load(self.image_path[index])
+            item = self.transform(item).transpose(2, 0, 1)
         else:
             item = self.transform(Image.open(self.image_path[index]))
         return item
@@ -265,6 +331,35 @@ def degamma_example():
     image_degamma = degamma(image)
     print(image_degamma.shape)
     print(image_degamma)
+
+
+
+
+def visualization_example():
+    ...
+    path = 'datasets/pixelshift/vizC_3ch'
+    # # dataloader = give_me_dataloader('viz',   path,   batch_size=1)
+    # ids = iter(dataloader)
+    # print(len(ids))
+
+    # for idx, image in enumerate(ids):
+    #     print(idx, image.shape, type(image), torch.min(image), torch.max(image))
+
+    #     rgb = image.squeeze().permute(1, 2, 0)
+    #     print('image.shape ', image.squeeze().shape)
+    #     print('rgb.shape ', rgb.squeeze().shape)
+    #     plt.figure()
+    #     plt.subplot(1,3,1)
+    #     plt.imshow((rgb/2)+1)
+    #     plt.title('rgb')
+
+    #     # plt.subplot(1,3,2)
+    #     # plt.imshow(raw.permute(1,2,0))
+    #     # plt.title('raw - degamma')
+
+    #     plt.show()
+    #     break
+
 
 
 def main():

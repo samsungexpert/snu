@@ -91,17 +91,17 @@ def train(args):
 
 
     # transform
-    transform = {'train': give_me_transform('train'),
-                 'valid': give_me_transform('valid'),
-                 'test' : give_me_transform('test'),
-                 'viz'  : give_me_transform('viz')}
+    transform = {'train': give_me_transform2('train', isnpy=True),
+                 'valid': give_me_transform2('valid', isnpy=True),
+                 'test' : give_me_transform2('test', isnpy=True),
+                 'viz'  : give_me_transform2('viz' , isnpy=True)}
 
     # dataloader
     BITS = 14
-    dataloader = {'train': give_me_dataloader(SingleDataset(mydata_path['train'], transform['train'], bits=BITS), batch_size),
-                  'valid': give_me_dataloader(SingleDataset(mydata_path['valid'], transform['valid'], bits=BITS), batch_size),
-                  'test' : give_me_dataloader(SingleDataset(mydata_path['test'],  transform['test'] , bits=BITS), batch_size),
-                  'viz'  : give_me_dataloader(SingleDataset(mydata_path['viz'],   transform['viz']  , bits=BITS), batch_size=2) }
+    dataloader = {'train': give_me_dataloader(SingleDataset(mydata_path['train'], transform['train'], bits=BITS, mylen=2), batch_size),
+                  'valid': give_me_dataloader(SingleDataset(mydata_path['valid'], transform['valid'], bits=BITS, mylen=2), batch_size),
+                  'test' : give_me_dataloader(SingleDataset(mydata_path['test'],  transform['test'] , bits=BITS, mylen=2), batch_size),
+                  'viz'  : give_me_dataloader(SingleDataset(mydata_path['viz'],   transform['viz']  , bits=BITS, mylen=2), batch_size=2) }
 
 
     nsteps={}
@@ -146,8 +146,21 @@ def train(args):
                 os.path.join('checkpoint', model_type, f"Generation_{model_name + model_sig}_{model_type}.onnx"))
 
 
+
     # visualize test images
     test_batch = next( iter(dataloader['test']))
+    print('test_batch.shape', test_batch.shape)
+
+
+    # train_batch = next( iter(dataloader['train']))
+    # print('train_batch.shape', train_batch.shape)
+
+
+
+
+
+    # exit()
+
 
     logpath = os.path.join('runs', model_name + '_' + model_type + model_sig)
     os.makedirs(logpath, exist_ok=True)
@@ -156,9 +169,9 @@ def train(args):
                                         model_B2A=None,
                                         device='cpu', test_batch=test_batch, nomalize=True, beta_for_gamma=1/2.2)
     summary.add_image('Generated_pairs', test_images.permute(2,0,1), 0)
-    # plt.imshow(test_images)
-    # plt.title('Real RGB \t Real RAW \n Fake RGB \t Fake RAW')
-    # plt.show()
+    plt.imshow(test_images)
+    plt.title('Real RGB \t Real RAW \n Fake RGB \t Fake RAW')
+    plt.show()
     # exit()
 
 
@@ -311,7 +324,8 @@ if __name__ == '__main__':
     argparser.add_argument('--dataset_name', default='pixelshift', type=str,
                     choices=['sidd', 'pixelshift', 'apple2orange'],
                     help='(default=%(default)s)')
-    argparser.add_argument('--dataset_path', default='/data/team19', type=str, help='(default=datasets')
+    # argparser.add_argument('--dataset_path', default='/data/team19', type=str, help='(default=datasets')
+    argparser.add_argument('--dataset_path', default='datasets', type=str, help='(default=datasets')
     argparser.add_argument('--model_sig', default="_gogo",
                     type=str, help='(default=model signature for same momdel different ckpt/log path)')
 
@@ -321,7 +335,7 @@ if __name__ == '__main__':
     argparser.add_argument('--input_size', type=int, help='input size', default=128)
     argparser.add_argument('--epoch', type=int, help='epoch number', default=200)
     argparser.add_argument('--lr', type=float, help='learning rate', default=1e-3)
-    argparser.add_argument('--batch_size', type=int, help='mini batch size', default=16)
+    argparser.add_argument('--batch_size', type=int, help='mini batch size', default=1)
     argparser.add_argument("--lambda_ide", type=float, default=10)
     argparser.add_argument("--lambda_generation", type=float, default=1)
     argparser.add_argument("--lambda_gan", type=float, default=100)
