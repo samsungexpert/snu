@@ -9,9 +9,9 @@ from tqdm import tqdm
 from torch import nn, optim
 
 
-# CUDA_VISIBLE_DEVICES=5 python mytrain_gan_pixelshift.py --dataset_path=/home/team19/datasets --batch_size=8 --epoch=200 --model_name=bwunet
-# CUDA_VISIBLE_DEVICES=6 python mytrain_gan_pixelshift.py --dataset_path=/home/team19/datasets --batch_size=8 --epoch=200 --model_name=unet
-# CUDA_VISIBLE_DEVICES=7 python mytrain_gan_pixelshift.py --dataset_path=/home/team19/datasets --batch_size=8 --epoch=200 --model_name=resnet
+# CUDA_VISIBLE_DEVICES=5 python mytrain_gan_pixelshift.py --dataset_path=/home/team19/datasets --batch_size=8 --epoch=200 --model_name=bwunet  --model_sig=_wine
+# CUDA_VISIBLE_DEVICES=6 python mytrain_gan_pixelshift.py --dataset_path=/home/team19/datasets --batch_size=8 --epoch=200 --model_name=unet  --model_sig=_wine
+# CUDA_VISIBLE_DEVICES=7 python mytrain_gan_pixelshift.py --dataset_path=/home/team19/datasets --batch_size=8 --epoch=200 --model_name=resnet  --model_sig=_wine
 
 
 # from util.visualizer import Visualizer
@@ -98,19 +98,19 @@ def train(args):
     for k,v in mydata_path.items():
         print(k,' : ', v)
 
-
     # transform
-    transform = {'train': give_me_transform('train'),
-                 'valid': give_me_transform('valid'),
-                 'test' : give_me_transform('test'),
-                 'viz'  : give_me_transform('viz')}
+    BITS = 16
+    transform = {'train': give_me_transform2('train', isnpy=True, bits=BITS),
+                 'valid': give_me_transform2('valid', isnpy=True, bits=BITS),
+                 'test' : give_me_transform2('test',  isnpy=True, bits=BITS),
+                 'viz'  : give_me_transform2('viz' ,  isnpy=True, bits=BITS)}
 
     # dataloader
-    BITS = 14
-    dataloader = {'train': give_me_dataloader(SingleDataset(mydata_path['train'], transform['train'], bits=BITS), batch_size),
-                  'valid': give_me_dataloader(SingleDataset(mydata_path['valid'], transform['valid'], bits=BITS), batch_size),
-                  'test' : give_me_dataloader(SingleDataset(mydata_path['test'],  transform['test'] , bits=BITS), batch_size),
-                  'viz'  : give_me_dataloader(SingleDataset(mydata_path['viz'],   transform['viz']  , bits=BITS), batch_size=2) }
+    dataloader = {'train': give_me_dataloader(SingleDataset(mydata_path['train'], transform['train'], bits=BITS, mylen=-1), batch_size),
+                  'valid': give_me_dataloader(SingleDataset(mydata_path['valid'], transform['valid'], bits=BITS, mylen=-1), batch_size),
+                  'test' : give_me_dataloader(SingleDataset(mydata_path['test'],  transform['test'] , bits=BITS, mylen=-1), batch_size),
+                  'viz'  : give_me_dataloader(SingleDataset(mydata_path['viz'],   transform['viz']  , bits=BITS, mylen=-1), batch_size=10) }
+
 
 
     nsteps={}
@@ -385,8 +385,8 @@ if __name__ == '__main__':
     argparser.add_argument('--dataset_name', default='pixelshift', type=str,
                     choices=['sidd', 'pixelshift', 'apple2orange'],
                     help='(default=%(default)s)')
-    argparser.add_argument('--dataset_path', default='/data/team19', type=str,
-    # argparser.add_argument('--dataset_path', default='datasets', type=str,
+    # argparser.add_argument('--dataset_path', default='/data/team19', type=str,
+    argparser.add_argument('--dataset_path', default='datasets', type=str,
                     help='(default=datasets')
     argparser.add_argument('--model_sig', default="_damn",
                     type=str, help='(default=model signature for same momdel different ckpt/log path)')
@@ -406,6 +406,6 @@ if __name__ == '__main__':
     argparser.add_argument("--gpunum", default="0", type=str,)
     args = argparser.parse_args()
 
-    os.environ["CUDA_VISIBLE_DEVICES"] = args.gpunum
+    # os.environ["CUDA_VISIBLE_DEVICES"] = args.gpunum
 
     main(args)

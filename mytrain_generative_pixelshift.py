@@ -8,9 +8,13 @@ import numpy as np
 from tqdm import tqdm
 from torch import nn, optim
 
-# CUDA_VISIBLE_DEVICES=5 python mytrain_generative_pixelshift.py --dataset_path=/home/team19/datasets --batch_size=8 --epoch=600 --model_name=bwunet --model_sig=gogo
-# CUDA_VISIBLE_DEVICES=6 python mytrain_generative_pixelshift.py --dataset_path=/home/team19/datasets --batch_size=8 --epoch=600 --model_name=unet --model_sig=gogo
-# CUDA_VISIBLE_DEVICES=7 python mytrain_generative_pixelshift.py --dataset_path=/home/team19/datasets --batch_size=8 --epoch=600 --model_name=resnet --model_sig=gogo
+# CUDA_VISIBLE_DEVICES=5 python mytrain_generative_pixelshift.py --dataset_path=/home/team19/datasets --batch_size=8 --epoch=600 --model_name=bwunet --model_sig=wine
+# CUDA_VISIBLE_DEVICES=6 python mytrain_generative_pixelshift.py --dataset_path=/home/team19/datasets --batch_size=8 --epoch=600 --model_name=unet --model_sig=wine
+# CUDA_VISIBLE_DEVICES=7 python mytrain_generative_pixelshift.py --dataset_path=/home/team19/datasets --batch_size=8 --epoch=600 --model_name=resnet --model_sig=wine
+
+# python mytrain_generative_pixelshift.py --gpunum=5 --dataset_path=/home/team19/datasets --batch_size=8 --epoch=600 --model_name=bwunet --model_sig=wine
+# python mytrain_generative_pixelshift.py --gpunum=6 --dataset_path=/home/team19/datasets --batch_size=8 --epoch=600 --model_name=bwunet --model_sig=wine
+# python mytrain_generative_pixelshift.py --gpunum=7 --dataset_path=/home/team19/datasets --batch_size=8 --epoch=600 --model_name=bwunet --model_sig=wine
 
 
 # from util.visualizer import Visualizer
