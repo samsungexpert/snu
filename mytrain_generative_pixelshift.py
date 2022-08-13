@@ -8,9 +8,9 @@ import numpy as np
 from tqdm import tqdm
 from torch import nn, optim
 
-# CUDA_VISIBLE_DEVICES=0 python mytrain_generative_pixelshift.py --dataset_path=/home/team19/datasets --batch_size=8 --epoch=200 --model_name=bwunet
-# CUDA_VISIBLE_DEVICES=1 python mytrain_generative_pixelshift.py --dataset_path=/home/team19/datasets --batch_size=8 --epoch=200 --model_name=unet
-# CUDA_VISIBLE_DEVICES=2 python mytrain_generative_pixelshift.py --dataset_path=/home/team19/datasets --batch_size=8 --epoch=200 --model_name=resnet
+# CUDA_VISIBLE_DEVICES=0 python mytrain_generative_pixelshift.py --dataset_path=/home/team19/datasets --batch_size=8 --epoch=200 --model_name=bwunet --model_sig=gogo
+# CUDA_VISIBLE_DEVICES=1 python mytrain_generative_pixelshift.py --dataset_path=/home/team19/datasets --batch_size=8 --epoch=200 --model_name=unet --model_sig=gogo
+# CUDA_VISIBLE_DEVICES=2 python mytrain_generative_pixelshift.py --dataset_path=/home/team19/datasets --batch_size=8 --epoch=200 --model_name=resnet --model_sig=gogo
 
 
 # from util.visualizer import Visualizer
@@ -324,8 +324,8 @@ if __name__ == '__main__':
     argparser.add_argument('--dataset_name', default='pixelshift', type=str,
                     choices=['sidd', 'pixelshift', 'apple2orange'],
                     help='(default=%(default)s)')
-    # argparser.add_argument('--dataset_path', default='/data/team19', type=str, help='(default=datasets')
-    argparser.add_argument('--dataset_path', default='datasets', type=str, help='(default=datasets')
+    argparser.add_argument('--dataset_path', default='/data/team19', type=str, help='(default=datasets')
+    # argparser.add_argument('--dataset_path', default='datasets', type=str, help='(default=datasets')
     argparser.add_argument('--model_sig', default="_gogo",
                     type=str, help='(default=model signature for same momdel different ckpt/log path)')
 
