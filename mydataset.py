@@ -228,7 +228,6 @@ class SingleDataset(DataLoader):
         self.transform = transforms
         self.mylen = mylen
         self.bits = bits
-        self.max_val = (2**(bits-8))-1
 
         self.image_path = glob.glob(os.path.join(dataset_dir, "**/*") , recursive=True)
         if mylen>0:

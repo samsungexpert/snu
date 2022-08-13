@@ -8,9 +8,9 @@ import numpy as np
 from tqdm import tqdm
 from torch import nn, optim
 
-# CUDA_VISIBLE_DEVICES=0 python mytrain_generative_pixelshift.py --dataset_path=/home/team19/datasets --batch_size=8 --epoch=200 --model_name=bwunet --model_sig=gogo
-# CUDA_VISIBLE_DEVICES=1 python mytrain_generative_pixelshift.py --dataset_path=/home/team19/datasets --batch_size=8 --epoch=200 --model_name=unet --model_sig=gogo
-# CUDA_VISIBLE_DEVICES=2 python mytrain_generative_pixelshift.py --dataset_path=/home/team19/datasets --batch_size=8 --epoch=200 --model_name=resnet --model_sig=gogo
+# CUDA_VISIBLE_DEVICES=5 python mytrain_generative_pixelshift.py --dataset_path=/home/team19/datasets --batch_size=8 --epoch=600 --model_name=bwunet --model_sig=gogo
+# CUDA_VISIBLE_DEVICES=6 python mytrain_generative_pixelshift.py --dataset_path=/home/team19/datasets --batch_size=8 --epoch=600 --model_name=unet --model_sig=gogo
+# CUDA_VISIBLE_DEVICES=7 python mytrain_generative_pixelshift.py --dataset_path=/home/team19/datasets --batch_size=8 --epoch=600 --model_name=resnet --model_sig=gogo
 
 
 # from util.visualizer import Visualizer
@@ -91,17 +91,17 @@ def train(args):
 
 
     # transform
-    transform = {'train': give_me_transform2('train', isnpy=True),
-                 'valid': give_me_transform2('valid', isnpy=True),
-                 'test' : give_me_transform2('test', isnpy=True),
-                 'viz'  : give_me_transform2('viz' , isnpy=True)}
+    BITS = 16
+    transform = {'train': give_me_transform2('train', isnpy=True, bits=BITS),
+                 'valid': give_me_transform2('valid', isnpy=True, bits=BITS),
+                 'test' : give_me_transform2('test',  isnpy=True, bits=BITS),
+                 'viz'  : give_me_transform2('viz' ,  isnpy=True, bits=BITS)}
 
     # dataloader
-    BITS = 14
-    dataloader = {'train': give_me_dataloader(SingleDataset(mydata_path['train'], transform['train'], bits=BITS, mylen=2), batch_size),
-                  'valid': give_me_dataloader(SingleDataset(mydata_path['valid'], transform['valid'], bits=BITS, mylen=2), batch_size),
-                  'test' : give_me_dataloader(SingleDataset(mydata_path['test'],  transform['test'] , bits=BITS, mylen=2), batch_size),
-                  'viz'  : give_me_dataloader(SingleDataset(mydata_path['viz'],   transform['viz']  , bits=BITS, mylen=2), batch_size=2) }
+    dataloader = {'train': give_me_dataloader(SingleDataset(mydata_path['train'], transform['train'], bits=BITS, mylen=-1), batch_size),
+                  'valid': give_me_dataloader(SingleDataset(mydata_path['valid'], transform['valid'], bits=BITS, mylen=-1), batch_size),
+                  'test' : give_me_dataloader(SingleDataset(mydata_path['test'],  transform['test'] , bits=BITS, mylen=-1), batch_size),
+                  'viz'  : give_me_dataloader(SingleDataset(mydata_path['viz'],   transform['viz']  , bits=BITS, mylen=-1), batch_size=10) }
 
 
     nsteps={}
