@@ -152,13 +152,15 @@ def train(args):
 
 
     ## save onnx
-    dummy_input_G = torch.randn(1, 3, 256, 256, device=device)
-    dummy_input_D = torch.randn(1, 6, 256, 256, device=device)
+    dummy_input_G = torch.randn(1, 3, 128, 128, device=device, requires_grad=False)
+    dummy_input_D = torch.randn(1, 6, 128, 128, device=device, requires_grad=False)
 
-    torch.onnx.export(model_G_A2B.eval(), dummy_input_G,
-                os.path.join('checkpoint', model_type, f"G_{model_name + model_sig}_{model_type}.onnx"))
-    torch.onnx.export(model_D_B.eval(),   dummy_input_D,
-                os.path.join('checkpoint', model_type, f"D_{model_name + model_sig}_{model_type}.onnx"))
+    with torch.no_grad():
+        torch.onnx.export(model_G_A2B.eval(), dummy_input_G,
+                    os.path.join('checkpoint', model_type, f"G_{model_name + model_sig}_{model_type}.onnx"))
+        torch.onnx.export(model_D_B.eval(),   dummy_input_D,
+                    os.path.join('checkpoint', model_type, f"D_{model_name + model_sig}_{model_type}.onnx"))
+
 
 
     # visualize test images
@@ -377,7 +379,7 @@ def main(args):
 if __name__ == '__main__':
     argparser = argparse.ArgumentParser()
 
-    argparser.add_argument('--model_name', default='resnet', type=str,
+    argparser.add_argument('--model_name', default='bwunet', type=str,
                     choices=['resnet', 'unet', 'bwunet'],
                     help='(default=%(default)s)')
     argparser.add_argument('--model_type', default="gan", type=str,
@@ -388,16 +390,16 @@ if __name__ == '__main__':
     # argparser.add_argument('--dataset_path', default='/data/team19', type=str,
     argparser.add_argument('--dataset_path', default='datasets', type=str,
                     help='(default=datasets')
-    argparser.add_argument('--model_sig', default="_damn",
+    argparser.add_argument('--model_sig', default="_kyochon",
                     type=str, help='(default=model signature for same momdel different ckpt/log path)')
 
     argparser.add_argument('--device', default='cuda', type=str,
                     choices=['cpu','cuda'],
                     help='(default=%(default)s)')
     argparser.add_argument('--input_size', type=int, help='input size', default=128)
-    argparser.add_argument('--epoch', type=int, help='epoch number', default=200)
+    argparser.add_argument('--epoch', type=int, help='epoch number', default=600)
     argparser.add_argument('--lr', type=float, help='learning rate', default=1e-3)
-    argparser.add_argument('--batch_size', type=int, help='mini batch size', default=2)
+    argparser.add_argument('--batch_size', type=int, help='mini batch size', default=1)
     argparser.add_argument("--lambda_ide", type=float, default=10)
     argparser.add_argument("--lambda_generation", type=float, default=1)
     argparser.add_argument("--lambda_gan", type=float, default=100)

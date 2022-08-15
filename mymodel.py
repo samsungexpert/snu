@@ -62,15 +62,43 @@ def set_requires_grad(nets, requires_grad=False):
                 param.requires_grad = requires_grad
 
 
+def test_bwunet():
+    model = networks.define_G(input_nc=3, output_nc=3, ngf=64, netG='bwunet')
+
+
+    ## save onnx
+    dummy_input = torch.randn(1, 3, 128, 128, device='cpu', requires_grad=False)
+
+    with torch.no_grad():
+        torch.onnx.export(model.eval(), dummy_input,
+                    os.path.join('model_bwunet_torch.onnx'))
+
+
+def test_unet():
+    model = networks.define_G(input_nc=3, output_nc=3, ngf=64, netG='unet_128')
+
+
+    ## save onnx
+    dummy_input = torch.randn(1, 3, 256, 128, device='cpu', requires_grad=False)
+
+    with torch.no_grad():
+        torch.onnx.export(model.eval(), dummy_input,
+                    os.path.join('model_unet_torch.onnx'))
+
 def main():
     # model = mygen_model('bwunet')
     # model = mygen_model('unet')
     # model =  mygen_model('resnet')
 
-    model =  mydisc_model('basic').to('cuda')
+    # model =  mydisc_model('basic').to('cuda')
 
-    print(model)
-    torchsummary.summary(model, input_size=(3, 128, 128))
+    # print(model)
+    # torchsummary.summary(model, input_size=(3, 128, 128))
+
+
+
+    # test_bwunet()
+    test_unet()
 
 
 if __name__ == '__main__':

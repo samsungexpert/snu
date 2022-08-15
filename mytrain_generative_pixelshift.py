@@ -175,7 +175,7 @@ def train(args):
     summary.add_image('Generated_pairs', test_images.permute(2,0,1), 0)
     plt.imshow(test_images)
     plt.title('Real RGB \t Real RAW \n Fake RGB \t Fake RAW')
-    plt.show()
+    #plt.show()
     # exit()
 
 

@@ -1,9 +1,10 @@
-import torch
+import os
+import torch, torchsummary
 import torch.nn as nn
 from torch.nn import init
 import functools
 from torch.optim import lr_scheduler
-
+import torch.nn.functional as F
 
 ###############################################################################
 # Helper Functions
@@ -155,7 +156,8 @@ def define_G(input_nc, output_nc, ngf, netG, norm='batch', use_dropout=False, in
     elif netG == 'unet_256':
         net = UnetGenerator(input_nc, output_nc, 8, ngf, norm_layer=norm_layer, use_dropout=use_dropout)
     elif netG =='bwunet':
-        net = BWUnet(input_nc, output_nc, 8, ngf, norm_layer=norm_layer, use_dropout=use_dropout)
+        # net = BWUnet(input_nc, output_nc, 8, ngf, norm=norm, use_dropout=use_dropout)
+        net = BWUnet2(input_nc, output_nc, ngf, norm=norm, use_dropout=use_dropout)
     else:
         raise NotImplementedError('Generator model name [%s] is not recognized' % netG)
     return init_net(net, init_type, init_gain, gpu_ids)
@@ -435,46 +437,77 @@ class ResnetBlock(nn.Module):
         return out
 
 
+
+
+
 class BWUnet(nn.Module):
-    def __init__(self, input_nc, output_nc, num_downs, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False):
+    def __init__(self, input_nc, output_nc, num_downs, ngf=64, norm='batch', use_dropout=False):
         super(BWUnet, self).__init__()
 
         self.ngf = ngf
 
+
+        ch1 = ngf
+        ch2 = ngf*2
+        ch3 = ngf*4
+        ch4 = ngf*8
+        ch5 = ngf*8
+        ch6 = ngf*8
+        ch7 = ngf*8
+
         kernel_size=3
-        self.enc_conv1 = nn.Conv2d(in_channels=input_nc, out_channels=ngf,   kernel_size=kernel_size, stride=1, padding=1)
-        self.enc_conv2 = nn.Conv2d(in_channels=ngf,      out_channels=ngf*2, kernel_size=kernel_size, stride=1, padding=1)
-        self.enc_conv3 = nn.Conv2d(in_channels=ngf*2,    out_channels=ngf*4, kernel_size=kernel_size, stride=1, padding=1)
-        self.enc_conv4 = nn.Conv2d(in_channels=ngf*4,    out_channels=ngf*8, kernel_size=kernel_size, stride=1, padding=1)
-        self.enc_conv5 = nn.Conv2d(in_channels=ngf*8,    out_channels=ngf*8, kernel_size=kernel_size, stride=1, padding=1)
-        self.enc_conv6 = nn.Conv2d(in_channels=ngf*8,    out_channels=ngf*8, kernel_size=kernel_size, stride=1, padding=1)
-        self.enc_conv7 = nn.Conv2d(in_channels=ngf*8,    out_channels=ngf*8, kernel_size=kernel_size, stride=1, padding=1)
+        self.enc_conv1 = nn.Conv2d(in_channels=input_nc, out_channels=ch1, kernel_size=kernel_size, stride=1, padding=1)
+        self.enc_conv2 = nn.Conv2d(in_channels=ch1,      out_channels=ch2, kernel_size=kernel_size, stride=1, padding=1)
+        self.enc_conv3 = nn.Conv2d(in_channels=ch2,      out_channels=ch3, kernel_size=kernel_size, stride=1, padding=1)
+        self.enc_conv4 = nn.Conv2d(in_channels=ch3,      out_channels=ch4, kernel_size=kernel_size, stride=1, padding=1)
+        self.enc_conv5 = nn.Conv2d(in_channels=ch4,      out_channels=ch5, kernel_size=kernel_size, stride=1, padding=1)
+        self.enc_conv6 = nn.Conv2d(in_channels=ch5,      out_channels=ch6, kernel_size=kernel_size, stride=1, padding=1)
+        self.enc_conv7 = nn.Conv2d(in_channels=ch6,      out_channels=ch7, kernel_size=kernel_size, stride=1, padding=1)
+
+        self.dinorm1 = self._mynorm_layer(ch1, None)
+        self.dinorm2 = self._mynorm_layer(ch2, norm)
+        self.dinorm3 = self._mynorm_layer(ch3, norm)
+        self.dinorm4 = self._mynorm_layer(ch4, norm)
+        self.dinorm5 = self._mynorm_layer(ch5, norm)
+        self.dinorm6 = self._mynorm_layer(ch6, norm)
+        self.dinorm7 = self._mynorm_layer(ch7, norm)
+
+        self.enc_block0 = self._enc_block(nch_in=input_nc, nch_out=ch1, pooling=None, norm=None)
+        self.enc_block1 = self._enc_block(nch_in=ch1,      nch_out=ch1, pooling='max', norm='batch')
+        self.enc_block2 = self._enc_block(nch_in=ch1,      nch_out=ch2, pooling='max', norm='batch')
+        self.enc_block3 = self._enc_block(nch_in=ch2,      nch_out=ch3, pooling='max', norm='batch')
+        self.enc_block4 = self._enc_block(nch_in=ch3,      nch_out=ch4, pooling='max', norm='batch')
+        self.enc_block5 = self._enc_block(nch_in=ch4,      nch_out=ch5, pooling=None, norm='batch')
+        self.enc_block6 = self._enc_block(nch_in=ch5,      nch_out=ch6, pooling=None, norm='batch')
+        self.enc_block7 = self._enc_block(nch_in=ch6,      nch_out=ch7, pooling=None, norm='batch')
 
 
-        self.dinorm1 = nn.InstanceNorm2d(self.ngf*1)
-        self.dinorm2 = nn.InstanceNorm2d(self.ngf*2)
-        self.dinorm3 = nn.InstanceNorm2d(self.ngf*4)
-        self.dinorm4 = nn.InstanceNorm2d(self.ngf*8)
-        self.dinorm5 = nn.InstanceNorm2d(self.ngf*8)
-        self.dinorm6 = nn.InstanceNorm2d(self.ngf*8)
-        self.dinorm7 = nn.InstanceNorm2d(self.ngf*8)
 
-        self.uinorm41 = nn.InstanceNorm2d(self.ngf*8)
-        self.uinorm42 = nn.InstanceNorm2d(self.ngf*4)
+        self.uinorm41 = self._mynorm_layer(ch4, norm)
+        self.uinorm42 = self._mynorm_layer(ch3, norm)
 
-        self.uinorm31 = nn.InstanceNorm2d(self.ngf*4)
-        self.uinorm32 = nn.InstanceNorm2d(self.ngf*2)
+        self.uinorm31 = self._mynorm_layer(ch3, norm)
+        self.uinorm32 = self._mynorm_layer(ch2, norm)
 
-        self.uinorm21 = nn.InstanceNorm2d(self.ngf*2)
-        self.uinorm22 = nn.InstanceNorm2d(self.ngf*1)
+        self.uinorm21 = self._mynorm_layer(ch2, norm)
+        self.uinorm22 = self._mynorm_layer(ch1, norm)
 
-        self.uinorm11 = nn.InstanceNorm2d(self.ngf*1)
-
+        self.uinorm11 = self._mynorm_layer(ch1, norm)
+        self.uinorm12 = self._mynorm_layer(ch1, norm)
 
 
         self.leaky_relu= nn.LeakyReLU(0.2)
         self.relu = nn.ReLU()
         self.tanh = nn.Tanh()
+        self.prelu = nn.PReLU()
+
+        self.prelu_d1 = nn.PReLU(ch1)
+        self.prelu_d2 = nn.PReLU(ch2)
+        self.prelu_d3 = nn.PReLU(ch3)
+        self.prelu_d4 = nn.PReLU(ch4)
+        self.prelu_d5 = nn.PReLU(ch5)
+        self.prelu_d6 = nn.PReLU(ch6)
+        self.prelu_d7 = nn.PReLU(ch7)
 
         self.dropout = nn.Dropout(0.5)
         self.maxpool = nn.MaxPool2d(kernel_size=2)
@@ -497,53 +530,99 @@ class BWUnet(nn.Module):
         self.last = nn.Conv2d(in_channels=ngf*1, out_channels=output_nc, kernel_size=kernel_size, stride=1, padding=1 )
 
 
+        self.enc_block1 = self._enc_block(3, 3, pooling=None, norm='batch')
+
+    def _mynorm_layer(self, nf, type, name=None):
+        if not isinstance(type, str):
+            layer = nn.Identity()
+        elif type.lower() == 'batch':
+            layer = nn.BatchNorm2d(nf)
+        elif type.lower() == 'instance':
+            layer = nn.InstanceNorm2d(nf)
+        elif type.lower() == 'None':
+            layer = nn.Identity()
+        else:
+            ValueError('Undefined normalization type, ', type)
+        return layer
+
+
+    def _pooling(self, type):
+        def func(x):
+            out = x
+            if type.lower() in ['maximum', 'max']:
+                out = nn.MaxPool2d(kernel_size=2)(x)
+            elif type.lower() in ['average', 'avg']:
+                out = nn.AvgPool2d(kernel_size=2)(x)
+            else:
+                ValueError('Unknown pooling type, ', type)
+            return out
+        return func
+
+    def _enc_block(self, nch_in, nch_out,
+                   kernel_size=3, stride=1, pooling='None', norm=None):
+        def func(x):
+            out1 = nn.Conv2d(in_channels=nch_in, out_channels=nch_out,
+                            kernel_size=kernel_size, stride=stride, padding=(kernel_size)//2)(x)
+            out1 = self._mynorm_layer(nch_out, norm)(out1)
+            out2 = nn.PReLU(nch_out)(out1)
+            return out1, out2
+        return func
+
+
     def forward(self, x):
 
         ## encoder
+        # enc1
+        out01, out02 = self.enc_block0(x)
+        # out03=x
+
         # ds1
-        out11 = self.enc_conv1(x) # 256x256x3-> 256x256x64
-        out11 = self.dinorm1(out11)
-        out12 = self.leaky_relu(out11)
-        out12 = self.maxpool(out12) # 256x256x64-> 128x128x64
+        # out11 = self.enc_conv1(out03) # 256x256x3-> 256x256x64
+        # out11 = self.dinorm1(out11)
+        # out12 = self.prelu_d1(out11)
+        out11, out12 = self.enc_block1(out02)
+        out13 = self.maxpool(out12) # 256x256x64-> 128x128x64
+        print('----=============================--> out13.shape ', out13.shape)
+        # exit()
 
         # ds2
-        out21 = self.enc_conv2(out12) # 128x128x64 -> 128x128x2*64
+        out21 = self.enc_conv2(out13) # 128x128x64 -> 128x128x2*64
         out21 = self.dinorm2(out21)
-        out22 = self.leaky_relu(out21)
-        out22 = self.maxpool(out22) # 128x128x2*64 -> 64x64x2*64
+        out22 = self.prelu_d2(out21)
+        out23 = self.maxpool(out22) # 128x128x2*64 -> 64x64x2*64
 
         # ds3
-        out31 = self.enc_conv3(out22) # 64x64x2*64 -> 64x64x4*64
+        out31 = self.enc_conv3(out23) # 64x64x2*64 -> 64x64x4*64
         out31 = self.dinorm3(out31)
-        out32 = self.leaky_relu(out31)
-        out32 = self.maxpool(out32) # 64x64x4*64 -> 32x32x4*64
+        out32 = self.prelu_d3(out31)
+        out33 = self.maxpool(out32) # 64x64x4*64 -> 32x32x4*64
 
         # ds4
-        out41 = self.enc_conv4(out32) # 32x32x4*64 -> 32x32x8*64
+        out41 = self.enc_conv4(out33) # 32x32x4*64 -> 32x32x8*64
         out41 = self.dinorm4(out41)
-        out42 = self.leaky_relu(out41)
-        out42 = self.maxpool(out42) # 32x32x8*64 -> 16x16x8*64
+        out42 = self.prelu_d4(out41)
+        out43 = self.maxpool(out42) # 32x32x8*64 -> 16x16x8*64
 
         # flat1
-        out5 = self.enc_conv5(out42) # 16x16x8*64 -> 16x16x8*64
+        out5 = self.enc_conv5(out43) # 16x16x8*64 -> 16x16x8*64
         out5 = self.dinorm5(out5)
-        out5 = self.leaky_relu(out5)
+        out5 = self.prelu_d5(out5)
 
         # flat2
         out6 = self.enc_conv6(out5) # 16x16x8*64 -> 16x16x8*64
         out6 = self.dinorm6(out6)
-        out6 = self.leaky_relu(out6)
+        out6 = self.prelu_d6(out6)
 
         # flat3
         out7 = self.enc_conv7(out6) # 16x16x8*64 -> 16x16x8*64
         out7 = self.dinorm7(out7)
-        out7 = self.leaky_relu(out7)
+        out7 = self.prelu_d7(out7)
 
         ## decoder
         # up4
 
         dout41 = self.dec_tconv4(out7) # 16x16x8*64 -> 32x32x8*64
-        dout41 = self.uinorm41(dout41) + out41
+        dout41 = self.uinorm41(dout41) + out42
         dout41 = self.relu(dout41)
         dout42 = self.dec_conv4(dout41) # 32x32x8*64 -> 32x32x4*64
         dout42 = self.uinorm42(dout42)
@@ -551,26 +630,26 @@ class BWUnet(nn.Module):
 
         # up3
         dout31 = self.dec_tconv3(dout42) # 32x32x4*64 -> 64x64x4*64
-        dout31 = self.uinorm31(dout31) + out31
+        dout31 = self.uinorm31(dout31) + out32
         dout31 = self.relu(dout31)
         dout32 = self.dec_conv3(dout31) # 64x64x4*64 -> 64x64x2*64
-        dout32 = self.uinorm42(dout32)
+        dout32 = self.uinorm32(dout32)
         dout32 = self.relu(dout32)
 
         # up2
         dout21 = self.dec_tconv2(dout32) # 64x64x2*64 -> 128x128x2*64
-        dout21 = self.uinorm21(dout21) + out21
+        dout21 = self.uinorm21(dout21) + out22
         dout21 = self.relu(dout21)
         dout22 = self.dec_conv2(dout21) # 128x128x2*64 -> 128x128x1*64
-        dout22 = self.uinorm42(dout22)
+        dout22 = self.uinorm22(dout22)
         dout22 = self.relu(dout22)
 
         # up1
         dout11 = self.dec_tconv1(dout22) # 128x128x1*64 -> 256x256x1*64
-        dout11 = self.uinorm11(dout11) + out11
+        dout11 = self.uinorm11(dout11) + out12
         dout11 = self.relu(dout11)
         dout12 = self.dec_conv1(dout11) # 256x256x1*64 -> 256x256x1*64
-        dout12 = self.uinorm42(dout12)
+        dout12 = self.uinorm12(dout12)
         dout12 = self.relu(dout12)
 
         # last
@@ -580,6 +659,178 @@ class BWUnet(nn.Module):
         return dout
 
 
+class Pooling(nn.Module):
+    def __init__(self, type):
+        super(Pooling, self).__init__()
+        if type.lower() in ['maximum', 'max']:
+            self.layer = nn.MaxPool2d(kernel_size=2)
+        elif type.lower() in ['average', 'avg']:
+            self.layer = nn.AvgPool2d(kernel_size=2)
+        else:
+            ValueError('Unknown pooling type, ', type)
+    def forward(self, x):
+        return self.layer(x)
+
+
+class Enc_block(nn.Module):
+
+    def __init__(self, in_channels, out_channels,
+                   kernel_size=3, stride=1, pooling=None, norm=None):
+        super(Enc_block, self).__init__()
+
+        self.pooling = pooling
+        self.norm = norm
+
+        self.conv = nn.Conv2d(in_channels=in_channels, out_channels=out_channels,
+                        kernel_size=kernel_size, stride=stride, padding=(kernel_size)//2)
+        self.norm =  nn.BatchNorm2d(out_channels)
+        self.prelu = nn.PReLU(out_channels)
+        self.pooling = self._pooling(pooling)
+
+
+    def _pooling(self, type):
+        def func(x):
+            if type == None:
+                layer = x
+            elif type.lower() in ['maximum', 'max']:
+                layer = nn.MaxPool2d(kernel_size=2)(x)
+            elif type.lower() in ['average', 'avg']:
+                layer = nn.AvgPool2d(kernel_size=2)(x)
+            else:
+                ValueError('Unknown pooling type, ', type)
+            return layer
+        return func
+
+    def forward(self, x):
+        conv_out = self.conv(x)
+        if self.norm != None:
+            conv_out = self.norm(conv_out)
+        act_out = self.prelu(conv_out)
+
+        if self.pooling != None:
+            pool_out = self.pooling(act_out)
+            return conv_out, act_out, pool_out
+        return conv_out, act_out, act_out
+
+
+
+class Dec_block(nn.Module):
+
+    def __init__(self, in_channels, out_channels,
+                   kernel_size=3, stride=1, norm=None):
+        super(Dec_block, self).__init__()
+
+        self.norm = norm
+
+        self.tconv = nn.ConvTranspose2d(in_channels=in_channels, out_channels=in_channels,
+                        kernel_size=kernel_size, stride=2,
+                                padding=(kernel_size)//2, output_padding=(kernel_size)//2)
+        self.conv = nn.Conv2d(in_channels=in_channels, out_channels=out_channels,
+                        kernel_size=kernel_size, stride=stride, padding=(kernel_size)//2)
+        self.norm = norm
+        if isinstance(norm, str):
+            if norm.lower() in ['batch']:
+                self.normt =  nn.BatchNorm2d(in_channels)
+                self.normc =  nn.BatchNorm2d(out_channels)
+            elif norm.lower() in ['instance']:
+                self.normt =  nn.InstanceNorm2d(in_channels)
+                self.normc =  nn.InstanceNorm2d(out_channels)
+
+        self.prelut = nn.PReLU(in_channels)
+        self.preluc = nn.PReLU(out_channels)
+
+
+    def forward(self, x, res=None):
+        tconv_out = self.tconv(x)
+        if self.norm != None:
+            tconv_out = self.normt(tconv_out)
+
+        if res != None:
+            tconv_out += res
+
+        tconv_act_out = self.prelut(tconv_out)
+
+        conv_out = self.conv(tconv_act_out)
+        if self.norm != None:
+            conv_out = self.normc(conv_out)
+        conv_act_out = self.preluc(conv_out)
+
+
+        return tconv_out, tconv_act_out, conv_act_out
+
+class BWUnet2(nn.Module):
+    def __init__(self, input_nc, output_nc, ngf=64, norm='batch', use_dropout=False):
+        super(BWUnet2, self).__init__()
+
+        self.ngf = ngf
+
+
+        ch1 = ngf
+        ch2 = ngf*2
+        ch3 = ngf*4
+        ch4 = ngf*8
+        ch5 = ngf*16
+        ch6 = ngf*16
+        ch7 = ngf*16
+
+        kernel_size=3
+
+        self.enc_block0 = Enc_block(in_channels=input_nc, out_channels=ch1, pooling=None,  norm=None)
+        self.enc_block1 = Enc_block(in_channels=ch1,      out_channels=ch2, pooling='max', norm='batch')
+        self.enc_block2 = Enc_block(in_channels=ch2,      out_channels=ch3, pooling='max', norm='batch')
+        self.enc_block3 = Enc_block(in_channels=ch3,      out_channels=ch4, pooling='max', norm='batch')
+        self.enc_block4 = Enc_block(in_channels=ch4,      out_channels=ch5, pooling='max', norm='batch')
+        self.enc_block5 = Enc_block(in_channels=ch5,      out_channels=ch5, pooling=None,  norm=None)
+        self.enc_block6 = Enc_block(in_channels=ch6,      out_channels=ch6, pooling=None,  norm=None)
+        self.enc_block7 = Enc_block(in_channels=ch7,      out_channels=ch7, pooling=None,  norm=None)
+
+        self.dec_block4 = Dec_block(in_channels=ch5, out_channels=ch4)
+        self.dec_block3 = Dec_block(in_channels=ch4, out_channels=ch3)
+        self.dec_block2 = Dec_block(in_channels=ch3, out_channels=ch2)
+        self.dec_block1 = Dec_block(in_channels=ch2, out_channels=ch1)
+        self.dec_block0 = Enc_block(in_channels=ch1, out_channels=ch1//2, pooling=None,  norm='batch')
+        self.last       = nn.Conv2d(in_channels=ch1//2, out_channels=output_nc,
+                                    kernel_size=kernel_size, stride=1, padding=(kernel_size)//2)
+        self.tanh = nn.Tanh()
+
+
+    def forward(self, x):
+
+
+        x01, x02, x03 = self.enc_block0(x)   # (    3, 128, 128) -> (   64, 128, 128)
+        x11, x12, x13 = self.enc_block1(x03) # (   64, 128, 128) -> (  128,  64,  64)
+        x21, x22, x23 = self.enc_block2(x13) # (  128,  64,  64) -> (  256,  32,  32)
+        x31, x32, x33 = self.enc_block3(x23) # (  256,  32,  32) -> (  512,  16,  16)
+        x41, x42, x43 = self.enc_block4(x33) # (  512,  16,  16) -> ( 1024,   8,   8)
+        x51, x52, x53 = self.enc_block5(x43) # ( 1024,   8,   8) -> ( 1024,   8,   8)
+        x61, x62, x63 = self.enc_block6(x53) # ( 1024,   8,   8) -> ( 1024,   8,   8)
+        x71, x72, x73 = self.enc_block7(x63) # ( 1024,   8,   8) -> ( 1024,   8,   8)
+
+        # print(f'<==========> x12.shape{x12.shape} <==========> x13.shape{x13.shape}')
+        # print(f'<==========> x22.shape{x22.shape} <==========> x23.shape{x23.shape}')
+        # print(f'<==========> x32.shape{x32.shape} <==========> x33.shape{x33.shape}')
+        # print(f'<==========> x42.shape{x42.shape} <==========> x43.shape{x43.shape}')
+        # print(f'<==========> x52.shape{x52.shape} <==========> x53.shape{x53.shape}')
+        # print(f'<==========> x62.shape{x62.shape} <==========> x63.shape{x63.shape}')
+        # print(f'<==========> x72.shape{x72.shape} <==========> x73.shape{x73.shape}')
+
+
+        d41, d42, d43 = self.dec_block4(x73, x41) # ( 1024,   8,   8) -> (  512,  16,  16)
+        d31, d32, d33 = self.dec_block3(d43, x31) # (  512,  16,  16) -> (  256,  32,  32)
+        d21, d22, d23 = self.dec_block2(d33, x21) # (  256,  32,  32) -> (  128,  64,  64)
+        d11, d12, d13 = self.dec_block1(d23, x11) # (  128,  64,  64) -> (   64, 128, 128)
+        d01, d02, d03 = self.dec_block0(d13 + x01) # (   64, 128, 128) -> (   32, 128, 128)
+        # print()
+        # print(f'<==========> d42.shape{d42.shape} <==========> d43.shape{d43.shape}')
+        # print(f'<==========> d32.shape{d32.shape} <==========> d33.shape{d33.shape}')
+        # print(f'<==========> d22.shape{d22.shape} <==========> d23.shape{d23.shape}')
+        # print(f'<==========> d12.shape{d12.shape} <==========> d13.shape{d13.shape}')
+        # print(f'<==========> d02.shape{d02.shape} <==========> d03.shape{d03.shape}')
+
+
+        last = self.tanh(self.last(d03))     # (   32, 128, 128) -> (   3, 128, 128)
+
+        return last
 
 
 
@@ -763,3 +1014,100 @@ class PixelDiscriminator(nn.Module):
     def forward(self, input):
         """Standard forward."""
         return self.net(input)
+
+
+
+
+
+class ResnetFlat(nn.Module):
+    def __init__(self, input_nc, output_nc, ngf=64, norm_layer=nn.BatchNorm2d, use_dropout=False):
+        super(ResnetFlat, self).__init__()
+
+
+        self.input_nc = input_nc
+        self.output_nc = output_nc
+        self.ngf = ngf
+
+        ## enc
+        kernel_size = 3
+        self.enc_conv1 = nn.Conv2d(in_channels=input_nc, out_channels=ngf,   kernel_size=kernel_size, stride=2, padding=1)
+        # self.enc_conv2 = nn.Conv2d(in_channels=ngf,      out_channels=ngf*2, kernel_size=kernel_size, stride=2, padding=1)
+
+
+        # ## dec
+        tkernel_size = 3
+        # self.dec_tconv2 = nn.ConvTranspose2d(in_channels=ngf*2, out_channels=ngf*2, kernel_size=tkernel_size, stride=2, padding=1)
+        # self.dec_conv2 = nn.Conv2d(in_channels=ngf*2, out_channels=ngf*1, kernel_size=kernel_size, stride=1, padding=1 )
+
+        self.dec_tconv1 = nn.ConvTranspose2d(in_channels=ngf*1, out_channels=ngf*1, kernel_size=tkernel_size, stride=2, padding=1, output_padding=1)
+        # self.dec_conv1 = nn.Conv2d(in_channels=ngf*1, out_channels=ngf*1, kernel_size=kernel_size, stride=1, padding=1 )
+
+        # self.last = nn.Conv2d(in_channels=ngf*1, out_channels=output_nc, kernel_size=kernel_size, stride=1, padding=1 )
+
+    def forward(self, x):
+
+        # enc1 = self.enc_conv1(x)
+        # enc2 = self.enc_conv2(enc1)
+
+        # dec21 = self.dec_tconv2(enc2)
+        # dec22 = self.dec_conv2(dec21)
+
+        # dec11 = self.dec_tconv1(dec22)
+        # dec12 = self.dec_conv1(dec11)
+
+        # out = self.last(dec12)
+
+
+        enc1 = self.enc_conv1(x)
+
+        # enc1 = self.enc_conv1(x)
+        out = self.dec_tconv1(enc1)
+
+
+        return out
+
+
+def test_tconv():
+    resnet_flat = ResnetFlat(3, 3)
+    print(resnet_flat)
+
+
+    dummy_input = torch.randn(1, 3, 128, 128, device='cpu', requires_grad=False)
+
+    with torch.no_grad():
+        torch.onnx.export(resnet_flat.eval(), dummy_input, "resnet_flat.onnx")
+
+
+def test_bwunet():
+    model = BWUnet2(input_nc=3, output_nc=3, ngf=64, norm='batch', use_dropout=True)
+    # print(model)
+    torchsummary.summary(model, input_size=(3, 128, 128))
+    ## save onnx
+    dummy_input = torch.randn(1, 3, 128, 128, device='cpu', requires_grad=False)
+
+    with torch.no_grad():
+        torch.onnx.export(model.train(), dummy_input,
+                    os.path.join('model_bwunet_torch.onnx'))
+
+def test_unet():
+
+    model = UnetGenerator(3, 3, 7, 64, norm_layer=norm_layer, use_dropout=use_dropout)
+    # print(model)
+    torchsummary.summary(model, input_size=(3, 128, 128))
+    ## save onnx
+    dummy_input = torch.randn(1, 3, 256, 512, device='cpu', requires_grad=False)
+
+    with torch.no_grad():
+        torch.onnx.export(model.train(), dummy_input,
+                    os.path.join('model_bwunet_torch.onnx'))
+
+def main():
+    ...
+    # test_tconv()
+    test_bwunet()
+    # test_unet()
+    print('done done')
+
+
+if __name__ == '__main__':
+    main()

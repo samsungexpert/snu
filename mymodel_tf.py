@@ -84,12 +84,14 @@ class GenerationTF():
         return out
 
     def _mynorm_layer(self, type, name=None):
-        if type.lower() == 'batch':
+        if not isinstance(type, str):
+            out = tf.keras.activations.linear
+        elif type.lower() == 'batch':
             out = tf.keras.layers.BatchNormalization(name=name)
         elif type.lower()== 'instance':
             out = tfa.layers.InstanceNormalization(name=name)
-        elif type.lower() == None:
-            out = tf.keras.activations.linear(name=name)
+        elif type.lower() == 'None':
+            out = tf.keras.activations.linear
         else:
             ValueError('Undefined normalization type, ', type)
         return out
@@ -195,41 +197,39 @@ class GenerationTF():
         return tf.keras.Model(inputs=inputs, outputs=x, name='unet')
 
 
-    def _enc_block(self, filters, kernek_size, strides:int=1, padding:str='same', pooling='max', name=None):
+    def _enc_block(self, filters:int, kernek_size:int, strides:int=1, padding:str='same', pooling:str='max', norm:str='batch', name=None):
         def func(x):
-            if pooling == None:
-                enc = tf.keras.layers.Conv2D(filters, kernek_size, strides,
+            enc = tf.keras.layers.Conv2D(filters, kernek_size, strides,
                                              padding, activation=None, name=name)(x)
-                enca = tf.keras.layers.PReLU(shared_axes=[1,2], name=name+'_prelu')(enc)
-                encp = enca
+            enc = self._mynorm_layer(norm)(enc)
+            enca = tf.keras.layers.PReLU(shared_axes=[1,2], name=name+'_prelu')(enc)
+
+            if pooling == 'max':
+                encp = tf.keras.layers.MaxPool2D(pool_size=2, strides=2, name=name+f'_{pooling}pooling')(enca)
+            elif pooling == 'avgerage':
+                encp = tf.keras.layers.AveragePooling2D(pool_size=2, strides=2, name=name+f'_{pooling}pooling')  (enca)
             else:
-                enc = tf.keras.layers.Conv2D(filters, kernek_size, strides,
-                                             padding, activation=None, name=name)(x)
-                enca = tf.keras.layers.PReLU(shared_axes=[1,2], name=name+'_prelu')(enc)
-                if pooling == 'max':
-                    encp = tf.keras.layers.MaxPool2D(pool_size=2, strides=2, name=name+f'_{pooling}pooling')(enca)
-                elif pooling == 'avgerage':
-                    encp = tf.keras.layers.AveragePooling2D(pool_size=2, strides=2, name=name+f'_{pooling}pooling')  (enca)
+                encp = enca
             return enc, enca, encp
         return func
 
-    def _dec_block(self, filters, kernel_size, strides:int=2, padding:str='same', name=None):
+    def _dec_block(self, filters:int, kernel_size:int, strides:int=2, padding:str='same', norm:str='batch', name=None):
         def func(x, res=None):
             out = tf.keras.layers.Conv2DTranspose(filters=filters, kernel_size=kernel_size, strides=strides,
                                             padding=padding, activation=None, name=name+'_tconv')(x)
-
+            out = self._mynorm_layer(norm)(out)
             if res != None:
                 out = tf.keras.layers.Add()([out, res])
                 out = tf.keras.layers.PReLU(shared_axes=[1,2], name=name+'_prelua')(out)
 
             out = tf.keras.layers.Conv2D(filters=filters//2,  kernel_size=kernel_size, strides=1,
                                          padding=padding, activation=None, name=name+'_conv')(out)
-
+            out = self._mynorm_layer(norm)(out)
             out = tf.keras.layers.PReLU(shared_axes=[1,2], name=name+'_prelu')(out)
             return out
         return func
 
-    def bwunet(self, input_shape=(128, 128, 3)):
+    def bwunet(self, input_shape=(128, 128, 3), norm='batch'):
 
 
         kernel_size = 3
@@ -239,13 +239,13 @@ class GenerationTF():
 
         # emb = tf.keras.layers.Conv2D(filters=filters, kernek_size=kernel_size, strides=1, padding='same',
         #                              activation=None, name='emb')(input)
-        emb, emba, embp = self._enc_block(filters, kernel_size, strides=1, pooling=None, name='emb')(input)   # (128, 128, 64)
+        emb, emba, embp = self._enc_block(filters, kernel_size, strides=1, pooling=None, norm=None, name='emb')(input)   # (128, 128, 64)
 
         # encoder
-        enc0, enc0a, enc0p = self._enc_block(filters*2, kernel_size, name='enc0')(embp)       # (64, 64, 128)
-        enc1, enc1a, enc1p = self._enc_block(filters*4, kernel_size, name='enc1')(enc0p)      # (32, 32, 256)
-        enc2, enc2a, enc2p = self._enc_block(filters*8, kernel_size, name='enc2')(enc1p)      # (16, 16, 512)
-        enc3, enc3a, enc3p = self._enc_block(filters*16, kernel_size, name='enc3')(enc2p)     # ( 8,  8, 1024)
+        enc0, enc0a, enc0p = self._enc_block(filters*2,  kernel_size, norm='batch', name='enc0')(embp)       # (64, 64, 128)
+        enc1, enc1a, enc1p = self._enc_block(filters*4,  kernel_size, norm='batch', name='enc1')(enc0p)      # (32, 32, 256)
+        enc2, enc2a, enc2p = self._enc_block(filters*8,  kernel_size, norm='batch', name='enc2')(enc1p)      # (16, 16, 512)
+        enc3, enc3a, enc3p = self._enc_block(filters*16, kernel_size, norm='batch', name='enc3')(enc2p)     # ( 8,  8, 1024)
 
         # flat
 
@@ -499,13 +499,15 @@ def main():
 
     model_name = 'resnet_ed'
     # model_name = 'resnet_flat'
-    # model_name = 'bwunet'
+    model_name = 'bwunet'
     # model_net = 'unet'
 
     bw = GenerationTF(model_name =  model_name)
     save_as_tflite(bw.model, name=f'model_{model_name}' )
 
-
+    # a = None
+    # print(isinstance (a, str))
+    # print(type(a))
 
 if __name__ == '__main__':
     main()
