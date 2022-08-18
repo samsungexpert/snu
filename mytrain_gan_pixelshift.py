@@ -1,5 +1,6 @@
 # https://www.kaggle.com/code/songseungwon/cyclegan-tutorial-from-scratch-monet-to-photo
 
+from audioop import mul
 import os, shutil
 import time
 import argparse
@@ -24,11 +25,14 @@ from mydataset import * #give_me_dataloader, SingleDataset, give_me_transform, g
 from myloss import BayerLoss
 import matplotlib.pyplot as plt
 
-def save_model(modelG, modelD, ckpt_path, epoch, loss=0.0, state='valid'):
+def save_model(modelG, modelD, ckpt_path, epoch, loss=0.0, state='valid', multigpu=0):
     try:
         fname = os.path.join(ckpt_path, "pix2pix_epoch_%05d__loss_%05.3e.pth"%(epoch, loss))
         if os.path.exists(fname):
             fname = fname.split('.pth')[0] + f'_{state}_1.pth'
+        if multigpu > 0:
+            modelG = modelG.module
+            modelD = modelD.module
         torch.save(
                 {
                     "model_G_A2B": modelG.state_dict(),
@@ -55,6 +59,7 @@ def train(args):
     input_size      = args.input_size
     batch_size      = args.batch_size
     device          = args.device
+    multigpu        = args.multigpu
     if dev == 'cpu':
         device = torch.device('cpu')
     else:
@@ -122,18 +127,33 @@ def train(args):
     model_G_A2B = mygen_model(model_name).to(device) # RGB --> RAW
     model_D_B   = mydisc_model('basic', input_nc=6).to(device)
 
+    ## save onnx
+    dummy_input_G = torch.randn(1, 3, 128, 128, device=device, requires_grad=False)
+    dummy_input_D = torch.randn(1, 6, 128, 128, device=device, requires_grad=False)
+
+    with torch.no_grad():
+        torch.onnx.export(model_G_A2B.eval(), dummy_input_G,
+                    os.path.join('checkpoint', model_type, f"G_{model_name + model_sig}_{model_type}.onnx"))
+        torch.onnx.export(model_D_B.eval(),   dummy_input_D,
+                    os.path.join('checkpoint', model_type, f"D_{model_name + model_sig}_{model_type}.onnx"))
+
+    # data parallel
+    if multigpu > 0:
+        model_G_A2B = nn.DataParallel(model_G_A2B)
+        model_D_B   = nn.DataParallel(model_D_B)
+
 
     ## ckpt save load if any
     ckpt_path_name      = f'checkpoint/{model_type}/{dataset_name}'
-    ckpt_path_name      = os.path.join(ckpt_path_name, model_name+model_sig)
     ckpt_path_name_best = os.path.join(ckpt_path_name, model_name+model_sig+'_best')
+    ckpt_path_name      = os.path.join(ckpt_path_name, model_name+model_sig)
 
     os.makedirs(ckpt_path_name, exist_ok=True)
     os.makedirs(ckpt_path_name_best, exist_ok=True)
 
     ckpt_list = os.listdir(ckpt_path_name)
+    ckpt_list = [x for x in ckpt_list if ( ('pth' in x) and ('valid' not in x) )]
     print(ckpt_list)
-
 
     epoch = 0
     if (ckpt_path_name is not None) and \
@@ -147,21 +167,7 @@ def train(args):
                 model_D_B.load_state_dict(checkpoint["model_D_B"])
                 epoch = checkpoint["epoch"]
     else:
-        save_model(model_G_A2B, model_D_B, ckpt_path_name, epoch, float('inf'))
-
-
-
-    ## save onnx
-    dummy_input_G = torch.randn(1, 3, 128, 128, device=device, requires_grad=False)
-    dummy_input_D = torch.randn(1, 6, 128, 128, device=device, requires_grad=False)
-
-    with torch.no_grad():
-        torch.onnx.export(model_G_A2B.eval(), dummy_input_G,
-                    os.path.join('checkpoint', model_type, f"G_{model_name + model_sig}_{model_type}.onnx"))
-        torch.onnx.export(model_D_B.eval(),   dummy_input_D,
-                    os.path.join('checkpoint', model_type, f"D_{model_name + model_sig}_{model_type}.onnx"))
-
-
+        save_model(model_G_A2B, model_D_B, ckpt_path_name, epoch, float('inf'), multigpu)
 
     # visualize test images
     test_batch = next( iter(dataloader['test']))
@@ -213,7 +219,7 @@ def train(args):
     disp = {'train':disp_train, 'valid':disp_valid}
 
 
-    step = {'train':0, 'valid':0}
+    step = {'train':epoch*nsteps['train'], 'valid':epoch*nsteps['train']}
 
     # loss_best_G_valid = float('inf')
     loss_best_G = {'train':float('inf'), 'valid':float('inf')}
@@ -348,14 +354,14 @@ def train(args):
                     summary.add_image('Generated_pairs', test_images.permute(2,0,1), step[state])
 
         else:
-            save_model(model_G_A2B, model_D_B, ckpt_path_name, epoch, loss_G_train_last)
+            save_model(model_G_A2B, model_D_B, ckpt_path_name, epoch, loss_G_train_last, multigpu)
 
             loss_G_average = loss_G_total[state] / nsteps[state]
             if loss_best_G[state] > loss_G_average:
                 print(f'best {state} ckpt updated!!!  old best {loss_best_G[state]} vs new best {loss_G_average}')
                 loss_best_G[state] = loss_G_average
                 summary.add_scalar(f"loss_best_G{state}", loss_best_G[state], step[state])
-                save_model(model_G_A2B, model_D_B, ckpt_path_name_best, epoch, loss_best_G[state])
+                save_model(model_G_A2B, model_D_B, ckpt_path_name_best, epoch, loss_best_G[state], multigpu)
 
 
 
@@ -366,7 +372,7 @@ def train(args):
 
         # Save checkpoint for every 5 epoch
         if epoch % 5 == 0:
-            save_model(model_G_A2B, model_D_B, ckpt_path_name, epoch, loss_G_train_last)
+            save_model(model_G_A2B, model_D_B, ckpt_path_name, epoch, loss_G_train_last, multigpu)
 
 
     print('done done')
@@ -405,7 +411,7 @@ if __name__ == '__main__':
     argparser.add_argument("--lambda_gan", type=float, default=100)
     argparser.add_argument("--lambda_cycle", type=float, default=5)
     argparser.add_argument("--identity", action="store_true")
-    argparser.add_argument("--gpunum", default="0", type=str,)
+    argparser.add_argument("--multigpu", default=0, type=int)
     args = argparser.parse_args()
 
     # os.environ["CUDA_VISIBLE_DEVICES"] = args.gpunum
