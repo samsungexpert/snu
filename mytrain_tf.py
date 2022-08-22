@@ -10,7 +10,6 @@ import os
 import glob
 import datetime
 import numpy as np
-import matplotlib.pyplot as plt
 
 # from torch.utils.tensorboard import SummaryWriter
 
@@ -62,13 +61,12 @@ def main(args):
     constraint = {'min_value': 0, 'max_value': constraint_max}
     model_name = args.model_name
     data_path = args.data_path
-    model_sig = args.model_sig
-    epoch = args.epoch
+    myepoch = args.epoch
 
 
 
     # loss_type = ['rgb', 'yuv', 'ploss'] # 'rgb', 'yuv', 'ploss'
-    loss_type = ['rgb', 'yuv', 'ssim']  # 'rgb', 'yuv', 'ploss
+    loss_type = ['rgb', 'yuv']  # 'rgb', 'yuv', 'ploss
     # loss_type = ['rgb']  # 'rgb', 'yuv', 'ploss
     # loss_type = ['yuv']
 
@@ -85,9 +83,11 @@ def main(args):
 
 
 
+
+    TAG = '_'
     base_path = 'model_dir'
     os.makedirs(base_path, exist_ok=True)
-    model_dir = os.path.join(base_path, 'checkpoint', model_name + model_sig)
+    model_dir = os.path.join(base_path, 'checkpoint', model_name)
 
 
 
@@ -104,7 +104,7 @@ def main(args):
     eval_files = get_tfrecords(data_path, 'valid')
     viz_files = get_tfrecords(data_path, 'viz10')
 
-    print('data_path, ', data_path)
+
     print('\n'.join(train_files))
     print('\n'.join(eval_files))
     print('\n'.join(viz_files))
@@ -116,7 +116,6 @@ def main(args):
     print('=========================================================')
     print('=========================================================')
     print('========================================================= NGPU', NGPU)
-
     batch_size = batch_size * NGPU  # 128
     batch_size_eval = batch_size * NGPU
     batch_size_viz = batch_size  # 128
@@ -152,13 +151,12 @@ def main(args):
     # print('train set len : ', dataset_train.element_spec)
 
 
-
-
-
-    cnt_train, cnt_valid = 92800, 4800 # w/o noise
-    cnt_train, cnt_valid = 96200, 4800 # with noise
-#     cnt_train, cnt_valid = 8, 8 # for test
-
+    cnt_train = 92800
+    cnt_valid = 4800
+    cnt_train = 256
+    cnt_valid = 64
+#     cnt_train = 8
+#     cnt_valid = 8
     cnt_viz = 10
 
 
@@ -166,7 +164,7 @@ def main(args):
     ## training gogo
     strategy = tf.distribute.MirroredStrategy()
     with strategy.scope():
-#     if True:
+    # if True:
 
         if input_type not in ['shrink', 'nonshrink', 'nonshrink_4ch', 'rgb']:
             raise ValueError('unkown input_type, ', input_type)
@@ -192,22 +190,20 @@ def main(args):
         ## load pre-trained model
         trained_model_file_name = '00003_resnet_flat_2.89940e-09_1.h5'
         model, prev_epoch = load_checkpoint_if_exists(model, model_dir, model_name, trained_model_file_name)
-
-
-
-
+        prev_epoch=0
 
 
         ## callbacks for training loop
         callbacks = get_training_callbacks(['ckeckpoint', 'tensorboard', 'image'],
-                                            base_path=base_path, model_name=model_name + model_sig,
-                                            dataloader=dataset_viz, cnt_viz=cnt_viz)
+                                            base_path=base_path, model_name=model_name,
+                                            dataloader=dataset_viz, cnt_viz=cnt_viz )
+
 
 
         # train gogo
         more_ckpt_ratio = 1
         model.fit(dataset_train,
-                    epochs=INTERVAL*more_ckpt_ratio,
+                    epochs=myepoch*more_ckpt_ratio,
                     steps_per_epoch=(cnt_train // (batch_size*more_ckpt_ratio)) + 1,
                     initial_epoch=prev_epoch,
                     validation_data=dataset_eval,
@@ -230,7 +226,7 @@ if __name__ == '__main__':
     parser.add_argument(
             '--input_max',
             type=float,
-            default=65535,
+            default=16384,
             help='input_max')
 
     parser.add_argument(
@@ -242,8 +238,14 @@ if __name__ == '__main__':
     parser.add_argument(
             '--batch_size',
             type=int,
+        #     default=16,
             default=1,
-            # default=1,
+            help='input patch size')
+
+    parser.add_argument(
+            '--patch_size',
+            type=int,
+            default=128,
             help='input patch size')
 
     parser.add_argument(
@@ -251,12 +253,6 @@ if __name__ == '__main__':
             type=int,
             default=600,
             help='epoch')
-
-    parser.add_argument(
-            '--patch_size',
-            type=int,
-            default=128,
-            help='input patch size')
 
     parser.add_argument(
             '--use_bn',
@@ -267,20 +263,14 @@ if __name__ == '__main__':
     parser.add_argument(
             '--model_name',
             type=str,
-            default='bwunet',
-            help='resnet_flat, resnet_ed, bwunet, unet')
-
-    parser.add_argument(
-            '--model_sig',
-            type=str,
-            default='_salad',
+            default='unet',
             help='resnet_flat, resnet_ed, bwunet, unet')
 
     parser.add_argument(
             '--data_path',
             type=str,
             default='/home/team19/datasets/pixelshift/tfrecords',
-        #    default='datasets/pixelshift/tfrecords',
+        #     default='datasets/pixelshift/tfrecords',
             help='add noise on dec input')
 
     args = parser.parse_args()

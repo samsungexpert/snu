@@ -418,8 +418,10 @@ class bwutils():
 
 
         if self.input_bias:
-            image       = (image       - 0.5) * 2.
-            image_gamma = (image_gamma - 0.5) * 2.
+            # image       = (image       - 0.5) * 2.
+            # image_gamma = (image_gamma - 0.5) * 2.
+            image       = (image       * 2) - 1
+            image_gamma = (image_gamma * 2) - 1
 
         return image_gamma, image
 
@@ -563,12 +565,16 @@ class TensorBoardImage(Callback):
         gidx = 0
         for idx,  (x, y) in enumerate(self.dataloader):
             pred   = self.model(x)
-            diff   = tf.math.abs(y-pred) / 2
-            all_images = tf.concat( [tf.concat([x, y]      , axis=2),
-                                     tf.concat([diff, pred], axis=2)] , axis=1)
+            diff   = tf.math.abs(y-pred)
 
-            if self.input_bias:
-                all_images = (all_images/2) + 1
+            all_images = tf.concat( [tf.concat([(x+1)/2, (y+1)/2]      , axis=2),
+                                     tf.concat([diff / 2, (pred+1)/2], axis=2)] , axis=1)
+
+            print('x: %.2f, %.2f' %( tf.reduce_min(x).numpy(), tf.reduce_max(x).numpy()), end='')
+            print(', y: %.2f, %.2f' %( tf.reduce_min(y).numpy(), tf.reduce_max(y).numpy()), end='')
+            print(', pred: %.2f, %.2f' % (  tf.reduce_min(pred).numpy(), tf.reduce_max(pred).numpy()), end='')
+            print(', diff: %.2f, %.2f' % ( tf.reduce_min(diff).numpy(), tf.reduce_max(diff).numpy()))
+
 
             with self.writer.as_default():
                 tf.summary.image(f"Viz set {gidx}", all_images, max_outputs=16, step=epoch)
@@ -598,7 +604,7 @@ def get_training_callbacks(names, base_path, model_name=None, dataloader=None, p
         tb_dir = os.path.join(base_path, 'board', model_name)
         os.makedirs(tb_dir, exist_ok=True)
         callback_tb = tf.keras.callbacks.TensorBoard( log_dir=tb_dir,
-                                                       histogram_freq=10,
+                                                       histogram_freq=2,
                                                        write_graph=True,
                                                        write_images=False)
         callbacks.append(callback_tb)
