@@ -63,9 +63,10 @@ class bwutils():
                 input_type='rgb',
                 output_type='data_only', # 'data_only', 'data_with_mask'
                 cfa_pattern='tetra',
-                patch_size=128,
-                crop_size=128,
+                patch_size:int=128,
+                crop_size:int=128,
                 input_max = 1.,
+                input_bits =16,
                 input_bias = True,
                 loss_scale = 1,
                 alpha_for_gamma = 0.05,
@@ -98,6 +99,7 @@ class bwutils():
         self.cfa_pattern = cfa_pattern
         self.patch_size = patch_size
         self.crop_size = crop_size
+        self.input_bits = input_bits
         self.input_max = input_max
         self.input_bias = input_bias
         self.alpha_for_gamma = alpha_for_gamma
@@ -376,6 +378,31 @@ class bwutils():
         return image
 
 
+    def add_noise_batch(self, image):
+        '''
+        image ~ (0,1) normalized
+        '''
+
+        std = 2 * (self.input_bits-10) * 24
+        noise_gaussian = tf.random.normal(image.shape) * std
+        noise_gaussian = self.scale_by_input_max(noise_gaussian)
+
+        pstd = 8
+        noise_poisson = tf.random.normal(image.shape) * tf.math.sqrt(image) * pstd
+        noise_poisson = self.scale_by_input_max(noise_poisson)
+        print('------------------------------------------')
+        print('------------------------------------------')
+        print('------------------------------------------')
+        print('------------------------------------------')
+        print('noise_poisson.shape', noise_poisson.shape)
+
+        image = image + noise_gaussian + noise_poisson
+
+        image = tf.clip_by_value(image, 0, 1)
+
+        return image
+
+
     def parse_tfrecord(self, example, mode):
 
         image = self.get_image_from_single_example(example, key='image', num_channels=3)
@@ -386,11 +413,17 @@ class bwutils():
         image = tf.clip_by_value(image, 0, 1)
         image_gamma = self.gamma(image)
 
+        # noise addition
+        image = self.add_noise_batch(image)
+
+
         if self.input_bias:
             image       = (image       - 0.5) * 2.
             image_gamma = (image_gamma - 0.5) * 2.
 
         return image_gamma, image
+
+
 
 
     def dataset_input_fn(self, params):
@@ -406,6 +439,8 @@ class bwutils():
             dataset = dataset.shuffle(params['shuffle_buff']).repeat()
 
         dataset = dataset.batch(params['batch'])
+
+        # dataset = dataset.map(self.add_noise_batch)
         dataset = dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
         # dataset = dataset.prefetch(8 * params['batch'])
 
