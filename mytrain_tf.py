@@ -100,9 +100,9 @@ def main(args):
         files = tf.io.gfile.glob(os.path.join(path, f'*{keyword}*tfrecords'))
         files.sort()
         return files
-    train_files = get_tfrecords(data_path, 'trainNP')
-    eval_files = get_tfrecords(data_path, 'validNP')
-    viz_files = get_tfrecords(data_path, 'vizNP')
+    train_files = get_tfrecords(data_path, 'train')
+    eval_files = get_tfrecords(data_path, 'valid')
+    viz_files = get_tfrecords(data_path, 'viz10')
 
     print('data_path, ', data_path)
     print('\n'.join(train_files))
