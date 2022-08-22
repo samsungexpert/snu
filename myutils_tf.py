@@ -506,12 +506,13 @@ def make_image(tensor):
     return summary
 
 class TensorBoardImage(Callback):
-    def __init__(self, log_dir, dataloader, patch_size, cnt_viz):
+    def __init__(self, log_dir, dataloader, patch_size, cnt_viz, input_bias):
         super().__init__()
         self.log_dir = log_dir
         self.dataloader = dataloader
         self.patch_size = patch_size
         self.cnt_viz = cnt_viz
+        self.input_bias = input_bias
 
     def set_model(self, model):
         self.model = model
@@ -543,7 +544,7 @@ class TensorBoardImage(Callback):
     def on_epoch_end(self, epoch, logs={}):
         self.write_image('Images', epoch)
 
-def get_training_callbacks(names, base_path, model_name=None, dataloader=None, patch_size=128, cnt_viz=4):
+def get_training_callbacks(names, base_path, model_name=None, dataloader=None, patch_size=128, cnt_viz=4, input_bias=True ):
     callbacks=[]
     if 'ckeckpoint' in names:
         ckpt_dir = os.path.join(base_path, 'checkpoint', model_name)
@@ -572,7 +573,8 @@ def get_training_callbacks(names, base_path, model_name=None, dataloader=None, p
         callback_images =TensorBoardImage( log_dir=tb_dir,
                                            dataloader = dataloader,
                                            patch_size = patch_size,
-                                           cnt_viz = cnt_viz)
+                                           cnt_viz = cnt_viz,
+                                           input_bias=input_bias)
         callbacks.append(callback_images)
     return callbacks
 
