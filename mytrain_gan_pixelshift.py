@@ -88,7 +88,7 @@ def train(args):
     base_path = os.path.join(dataset_path, dataset_name)
     print('base_path: ', base_path)
 
-     # path
+    # path
     mytype = 'C_3ch'
     train_path = os.path.join(base_path, 'train'+ mytype)
     valid_path = os.path.join(base_path, 'valid'+ mytype)

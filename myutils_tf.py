@@ -527,11 +527,15 @@ class TensorBoardImage(Callback):
         gidx = 0
         for idx,  (x, y) in enumerate(self.dataloader):
             pred   = self.model(x)
-            diff   = tf.math.abs(y-pred)
+            diff   = tf.math.abs(y-pred) / 2
             all_images = tf.concat( [tf.concat([x, y]      , axis=2),
                                      tf.concat([diff, pred], axis=2)] , axis=1)
+
+            if self.input_bias:
+                all_images = (all_images/2) + 1
+
             with self.writer.as_default():
-                tf.summary.image(f"Viz set {gidx}", all_images, max_outputs=12, step=epoch)
+                tf.summary.image(f"Viz set {gidx}", all_images, max_outputs=16, step=epoch)
             gidx+=1
 
         self.writer.flush()
@@ -558,7 +562,7 @@ def get_training_callbacks(names, base_path, model_name=None, dataloader=None, p
         tb_dir = os.path.join(base_path, 'board', model_name)
         os.makedirs(tb_dir, exist_ok=True)
         callback_tb = tf.keras.callbacks.TensorBoard( log_dir=tb_dir,
-                                                       histogram_freq=2,
+                                                       histogram_freq=10,
                                                        write_graph=True,
                                                        write_images=False)
         callbacks.append(callback_tb)

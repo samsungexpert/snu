@@ -27,11 +27,14 @@ from mydataset import * #give_me_dataloader, SingleDataset, give_me_transform, g
 from myloss import BayerLoss
 import matplotlib.pyplot as plt
 
-def save_model(modelG, ckpt_path, epoch, loss=0.0, state='valid'):
+def save_model(modelG, ckpt_path, epoch, loss=0.0, state='valid', multigpu=0):
     try:
         fname = os.path.join(ckpt_path, "generation_epoch_%05d__loss_%05.3e.pth"%(epoch, loss))
         if os.path.exists(fname):
             fname = fname.split('.pth')[0] + f'_{state}_1.pth'
+        if multigpu > 0:
+            modelG = modelG.module
+
         torch.save(
                 {
                     "model_generation_A2B": modelG.state_dict(),
@@ -57,6 +60,7 @@ def train(args):
     input_size      = args.input_size
     batch_size      = args.batch_size
     device          = args.device
+    multigpu        = args.multigpu
     if dev == 'cpu':
         device = torch.device('cpu')
     else:
@@ -117,15 +121,32 @@ def train(args):
     model_G_A2B = mygen_model(model_name).to(device) # RGB --> RAW
 
 
+    ## save onnx
+    dummy_input_G = torch.randn(1, 3, 128, 128, device=device, requires_grad=False)
+    dummy_input_D = torch.randn(1, 6, 128, 128, device=device, requires_grad=False)
+
+    with torch.no_grad():
+        torch.onnx.export(model_G_A2B.eval(), dummy_input_G,
+                    os.path.join('checkpoint', model_type, f"G_{model_name + model_sig}_{model_type}.onnx"))
+        torch.onnx.export(model_D_B.eval(),   dummy_input_D,
+                    os.path.join('checkpoint', model_type, f"D_{model_name + model_sig}_{model_type}.onnx"))
+
+    # data parallel
+    if multigpu > 0:
+        model_G_A2B = nn.DataParallel(model_G_A2B)
+        model_D_B   = nn.DataParallel(model_D_B)
+
+
     ## ckpt save load if any
     ckpt_path_name      = f'checkpoint/{model_type}/{dataset_name}'
-    ckpt_path_name      = os.path.join(ckpt_path_name, model_name+model_sig)
     ckpt_path_name_best = os.path.join(ckpt_path_name, model_name+model_sig+'_best')
+    ckpt_path_name      = os.path.join(ckpt_path_name, model_name+model_sig)
 
-    os.makedirs(ckpt_path_name,      exist_ok=True)
+    os.makedirs(ckpt_path_name, exist_ok=True)
     os.makedirs(ckpt_path_name_best, exist_ok=True)
 
     ckpt_list = os.listdir(ckpt_path_name)
+    ckpt_list = [x for x in ckpt_list if ( ('pth' in x) and ('valid' not in x) )]
     print(ckpt_list)
 
 
@@ -190,8 +211,7 @@ def train(args):
     criterion_GAN = nn.MSELoss() #  vanilla: nn.BCEWithLogitsLoss(), lsgan: nn.MseLoss()
 
     # Optimizer, Schedular
-    optim_G = optim.Adam(model_G_A2B.parameters(), lr=args.lr, betas=(0.5, 0.999),
-    )
+    optim_G = optim.Adam(model_G_A2B.parameters(), lr=args.lr, betas=(0.5, 0.999))
 
 
     lr_lambda = lambda epoch: 1 - ((epoch - 1) // 100) / (args.epoch / 100)
@@ -206,7 +226,7 @@ def train(args):
     disp = {'train':disp_train, 'valid':disp_valid}
 
 
-    step = {'train':0, 'valid':0}
+    step = {'train':epoch*nsteps['train'], 'valid':epoch*nsteps['train']}
 
     # loss_best_G_valid = float('inf')
     loss_best_G = {'train':float('inf'), 'valid':float('inf')}
@@ -345,10 +365,9 @@ if __name__ == '__main__':
     argparser.add_argument("--lambda_gan", type=float, default=100)
     argparser.add_argument("--lambda_cycle", type=float, default=5)
     argparser.add_argument("--identity", action="store_true")
-    argparser.add_argument("--gpunum", default="0", type=str,)
+    argparser.add_argument("--multigpu", default=0, type=int)
     args = argparser.parse_args()
 
-    os.environ["CUDA_VISIBLE_DEVICES"] = args.gpunum
-    args = argparser.parse_args()
+    # os.environ["CUDA_VISIBLE_DEVICES"] = args.gpunum
 
     main(args)

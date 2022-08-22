@@ -10,6 +10,7 @@ import os
 import glob
 import datetime
 import numpy as np
+import matplotlib.pyplot as plt
 
 # from torch.utils.tensorboard import SummaryWriter
 
@@ -61,11 +62,13 @@ def main(args):
     constraint = {'min_value': 0, 'max_value': constraint_max}
     model_name = args.model_name
     data_path = args.data_path
+    model_sig = args.model_sig
+    epoch = args.epoch
 
 
 
     # loss_type = ['rgb', 'yuv', 'ploss'] # 'rgb', 'yuv', 'ploss'
-    loss_type = ['rgb', 'yuv']  # 'rgb', 'yuv', 'ploss
+    loss_type = ['rgb', 'yuv', 'ssim']  # 'rgb', 'yuv', 'ploss
     # loss_type = ['rgb']  # 'rgb', 'yuv', 'ploss
     # loss_type = ['yuv']
 
@@ -84,7 +87,7 @@ def main(args):
 
     base_path = 'model_dir'
     os.makedirs(base_path, exist_ok=True)
-    model_dir = os.path.join(base_path, 'checkpoint', model_name)
+    model_dir = os.path.join(base_path, 'checkpoint', model_name + model_sig)
 
 
 
@@ -97,11 +100,11 @@ def main(args):
         files = tf.io.gfile.glob(os.path.join(path, f'*{keyword}*tfrecords'))
         files.sort()
         return files
-    train_files = get_tfrecords(data_path, 'train')
-    eval_files = get_tfrecords(data_path, 'valid')
-    viz_files = get_tfrecords(data_path, 'viz10')
+    train_files = get_tfrecords(data_path, 'trainNP')
+    eval_files = get_tfrecords(data_path, 'validNP')
+    viz_files = get_tfrecords(data_path, 'vizNP')
 
-
+    print('data_path, ', data_path)
     print('\n'.join(train_files))
     print('\n'.join(eval_files))
     print('\n'.join(viz_files))
@@ -113,6 +116,7 @@ def main(args):
     print('=========================================================')
     print('=========================================================')
     print('========================================================= NGPU', NGPU)
+
     batch_size = batch_size * NGPU  # 128
     batch_size_eval = batch_size * NGPU
     batch_size_viz = batch_size  # 128
@@ -148,20 +152,21 @@ def main(args):
     # print('train set len : ', dataset_train.element_spec)
 
 
-    cnt_train = 92800
-    cnt_valid = 4800
-    # cnt_train = 256
-    # cnt_valid = 64
-    # cnt_train = 8
-    # cnt_valid = 8
+
+
+
+    cnt_train, cnt_valid = 92800, 4800 # w/o noise
+    cnt_train, cnt_valid = 96200, 4800 # with noise
+    cnt_train, cnt_valid = 8, 8 # for test
+
     cnt_viz = 10
 
 
     #########################
     ## training gogo
-    strategy = tf.distribute.MirroredStrategy()
-    with strategy.scope():
-    # if True:
+#     strategy = tf.distribute.MirroredStrategy()
+#     with strategy.scope():
+    if True:
 
         if input_type not in ['shrink', 'nonshrink', 'nonshrink_4ch', 'rgb']:
             raise ValueError('unkown input_type, ', input_type)
@@ -187,14 +192,33 @@ def main(args):
         ## load pre-trained model
         trained_model_file_name = '00003_resnet_flat_2.89940e-09_1.h5'
         model, prev_epoch = load_checkpoint_if_exists(model, model_dir, model_name, trained_model_file_name)
-        prev_epoch=0
 
+
+        # visualization
+        vinput = next(iter(dataset_viz))
+        print(type(vinput))
+        vrgb, vraw = vinput
+        print('type(vraw)', type(vraw))
+        # print('huh?')
+        # exit()
+        vout = model.predict(vraw.numpy())
+        print(vout.shape)
+        for idx,  (x, y) in enumerate(dataset_viz):
+            pred   = model.predict(x)
+            diff   = tf.math.abs(y-pred)
+            all_images = tf.concat( [tf.concat([x, y]      , axis=2),
+                                     tf.concat([diff, pred], axis=2)] , axis=1)
+            plt.imshow(all_images[0])
+            plt.show()
+            break
+
+
+        exit()
 
         ## callbacks for training loop
         callbacks = get_training_callbacks(['ckeckpoint', 'tensorboard', 'image'],
-                                            base_path=base_path, model_name=model_name,
-                                            dataloader=dataset_viz, cnt_viz=cnt_viz )
-
+                                            base_path=base_path, model_name=model_name + model_sig,
+                                            dataloader=dataset_viz, cnt_viz=cnt_viz)
 
 
         # train gogo
@@ -223,7 +247,7 @@ if __name__ == '__main__':
     parser.add_argument(
             '--input_max',
             type=float,
-            default=16384,
+            default=65535,
             help='input_max')
 
     parser.add_argument(
@@ -235,9 +259,15 @@ if __name__ == '__main__':
     parser.add_argument(
             '--batch_size',
             type=int,
-            default=16,
+            default=1,
             # default=1,
             help='input patch size')
+
+    parser.add_argument(
+            '--epoch',
+            type=int,
+            default=600,
+            help='epoch')
 
     parser.add_argument(
             '--patch_size',
@@ -254,14 +284,20 @@ if __name__ == '__main__':
     parser.add_argument(
             '--model_name',
             type=str,
-            default='resnet_flat',
+            default='bwunet',
+            help='resnet_flat, resnet_ed, bwunet, unet')
+
+    parser.add_argument(
+            '--model_sig',
+            type=str,
+            default='_salad',
             help='resnet_flat, resnet_ed, bwunet, unet')
 
     parser.add_argument(
             '--data_path',
             type=str,
-            default='/home/team19/datasets/pixelshift/tfrecords',
-            # default='datasets/pixelshift/tfrecords',
+        #     default='/home/team19/datasets/pixelshift/tfrecords',
+            default='datasets/pixelshift/tfrecords',
             help='add noise on dec input')
 
     args = parser.parse_args()
