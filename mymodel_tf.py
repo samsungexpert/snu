@@ -287,7 +287,7 @@ class GenerationTF():
 
         return out
 
-    def resnet_flat(self, input_shape=(128, 128, 3), nch:int=64, nblocks:int=12, norm='batch'):
+    def resnet_flat(self, input_shape=(128, 128, 3), nch:int=128, nblocks:int=12, norm='batch'):
         input = tf.keras.layers.Input(shape=input_shape, name='resnet_flat_input')
 
 
@@ -298,18 +298,30 @@ class GenerationTF():
                                     activation='relu',
                                     name='enc0')(input)
 
-
+        rout = []
         for idx in range(nblocks):
             out = self._residual_block(out, nch=nch, ctype='flat', nblock=idx, norm=norm)
+            rout.append(out)
+            if idx>nblocks//2:
+                out += rout[nblocks-1-idx]
 
+        # for idx in range(nblocks//2):
+        #     rout[nblocks-1-idx] += rout[idx]
 
+        # out += rout
+        out = tf.keras.layers.Conv2D(filters=nch,
+                                    kernel_size=(3, 3),
+                                    strides=(1,1),
+                                    padding='same',
+                                    activation='relu',
+                                    name='last1')(out)
 
         out = tf.keras.layers.Conv2D(filters=3,
                                     kernel_size=(3, 3),
                                     strides=(1,1),
                                     padding='same',
                                     activation='tanh',
-                                    name='last')(out)
+                                    name='last0')(out)
 
         model = tf.keras.Model(inputs=input, outputs=out, name=f'resnet_flat_{nblocks}')
         return model
@@ -498,8 +510,8 @@ def main():
 
 
     model_name = 'resnet_ed'
-    # model_name = 'resnet_flat'
-    model_name = 'bwunet'
+    model_name = 'resnet_flat'
+    # model_name = 'bwunet'
     # model_net = 'unet'
 
     bw = GenerationTF(model_name =  model_name)
