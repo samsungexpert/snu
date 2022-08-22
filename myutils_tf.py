@@ -574,6 +574,10 @@ class TensorBoardImage(Callback):
             all_images = tf.concat( [tf.concat([x, y]      , axis=2),
                                      tf.concat([diff, pred], axis=2)] , axis=1)
 
+            print('x: %.2f, %.2f' %( tf.reduce_min(x).numpy(), tf.reduce_max(x).numpy()), end='')
+            print(', y: %.2f, %.2f' %( tf.reduce_min(y).numpy(), tf.reduce_max(y).numpy()), end='')
+            print(', pred: %.2f, %.2f' % (  tf.reduce_min(pred).numpy(), tf.reduce_max(pred).numpy()), end='')
+            print(', diff: %.2f, %.2f' % ( tf.reduce_min(diff).numpy(), tf.reduce_max(diff).numpy()))
 
             with self.writer.as_default():
                 tf.summary.image(f"Viz set {gidx}", all_images, max_outputs=16, step=epoch)

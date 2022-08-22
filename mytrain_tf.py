@@ -157,7 +157,7 @@ def main(args):
 
     cnt_train, cnt_valid = 92800, 4800 # w/o noise
     cnt_train, cnt_valid = 96200, 4800 # with noise
-    cnt_train, cnt_valid = 8, 8 # for test
+#     cnt_train, cnt_valid = 8, 8 # for test
 
     cnt_viz = 10
 
@@ -279,8 +279,9 @@ if __name__ == '__main__':
     parser.add_argument(
             '--data_path',
             type=str,
-        #     default='/home/team19/datasets/pixelshift/tfrecords',
-           default='datasets/pixelshift/tfrecords',
+            default='/home/team19/datasets/pixelshift/tfrecords',
+        #     default='/data03/team01/pixelshift/tfrecords',
+        #     default='datasets/pixelshift/tfrecords',
             help='add noise on dec input')
 
     args = parser.parse_args()
