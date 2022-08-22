@@ -63,7 +63,7 @@ def main(args):
     model_name = args.model_name
     data_path = args.data_path
     model_sig = args.model_sig
-    epoch = args.epoch
+    myepoch = args.epoch
 
 
 
@@ -207,7 +207,7 @@ def main(args):
         # train gogo
         more_ckpt_ratio = 1
         model.fit(dataset_train,
-                    epochs=INTERVAL*more_ckpt_ratio,
+                    epochs=myepoch*more_ckpt_ratio,
                     steps_per_epoch=(cnt_train // (batch_size*more_ckpt_ratio)) + 1,
                     initial_epoch=prev_epoch,
                     validation_data=dataset_eval,
@@ -273,8 +273,8 @@ if __name__ == '__main__':
     parser.add_argument(
             '--model_sig',
             type=str,
-            default='_salad',
-            help='resnet_flat, resnet_ed, bwunet, unet')
+            default='_noise',
+            help='model postfix')
 
     parser.add_argument(
             '--data_path',

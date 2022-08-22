@@ -418,8 +418,8 @@ class bwutils():
 
 
         if self.input_bias:
-            image       = (image       - 0.5) * 2.
-            image_gamma = (image_gamma - 0.5) * 2.
+             image       = (image       * 2) - 1
+             image_gamma = (image_gamma * 2) - 1
 
         return image_gamma, image
 
@@ -563,12 +563,17 @@ class TensorBoardImage(Callback):
         gidx = 0
         for idx,  (x, y) in enumerate(self.dataloader):
             pred   = self.model(x)
-            diff   = tf.math.abs(y-pred) / 2
+            diff   = tf.math.abs(y-pred)
+
+            if self.input_bias:
+                x    = (   x + 1) / 2
+                y    = (   y + 1) / 2
+                pred = (pred + 1) / 2
+                diff /= 2
+
             all_images = tf.concat( [tf.concat([x, y]      , axis=2),
                                      tf.concat([diff, pred], axis=2)] , axis=1)
 
-            if self.input_bias:
-                all_images = (all_images/2) + 1
 
             with self.writer.as_default():
                 tf.summary.image(f"Viz set {gidx}", all_images, max_outputs=16, step=epoch)
