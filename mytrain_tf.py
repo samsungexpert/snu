@@ -194,26 +194,9 @@ def main(args):
         model, prev_epoch = load_checkpoint_if_exists(model, model_dir, model_name, trained_model_file_name)
 
 
-        # visualization
-        vinput = next(iter(dataset_viz))
-        print(type(vinput))
-        vrgb, vraw = vinput
-        print('type(vraw)', type(vraw))
-        # print('huh?')
-        # exit()
-        vout = model.predict(vraw.numpy())
-        print(vout.shape)
-        for idx,  (x, y) in enumerate(dataset_viz):
-            pred   = model.predict(x)
-            diff   = tf.math.abs(y-pred)
-            all_images = tf.concat( [tf.concat([x, y]      , axis=2),
-                                     tf.concat([diff, pred], axis=2)] , axis=1)
-            plt.imshow(all_images[0])
-            plt.show()
-            break
 
 
-        exit()
+
 
         ## callbacks for training loop
         callbacks = get_training_callbacks(['ckeckpoint', 'tensorboard', 'image'],
