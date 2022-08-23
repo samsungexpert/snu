@@ -514,31 +514,36 @@ class bwutils():
         return ssim_loss
 
 
+def get_checkpoint_manager(model, optimizer, directory, name):
+    checkpoint = tf.train.Checkpoint(model=model,
+                               optimizer=optimizer)
+    checkpoint_manager = tf.train.CheckpointManager(checkpoint=checkpoint,
+                                                    directory=directory,
+                                                    max_to_keep=5,
+                                                    checkpoint_name=name,
+                                                    )
+    return checkpoint_manager
 
 
-def make_image(tensor):
-    """
-    Convert an numpy representation image to Image protobuf.
-    Copied from https://github.com/lanpa/tensorboard-pytorch/
-    """
-    _, height, width, channel = tensor.shape
-    tensor = tensor[0]
-    tensor_normalized = tensor - tensor.min()
-    tensor_normalized /= tensor_normalized.max()
-    tensor_normalized = img_as_ubyte(tensor_normalized)
-    tensor_squeezed = np.squeeze(tensor_normalized)
-    image = Image.fromarray(tensor_squeezed)
-    output = io.BytesIO()
-    image.save(output, format='PNG')
-    image_string = output.getvalue()
-    output.close()
-    summary = tf.Summary.Image(
-        height=height,
-        width=width,
-        colorspace=channel,
-        encoded_image_string=image_string,
-    )
-    return summary
+class BwCkptCallback(Callback):
+    def __init__(self, model, optimizer, directory, name ):
+        super().__init__()
+        self.manager = get_checkpoint_manager(model, optimizer, directory, name)
+        self.val_loss = np.inf
+
+
+    def set_model(self, model):
+        self.model = model
+
+    def on_train_begin(self, _):
+         pass
+
+    def on_epoch_end(self, epoch, logs={}):
+        print('--------------------> save gogo START')
+        self.manager.save()
+        print('--------------------> save gogo END')
+
+
 
 class TensorBoardImage(Callback):
     def __init__(self, log_dir, dataloader, patch_size, cnt_viz, input_bias):
@@ -590,6 +595,7 @@ class TensorBoardImage(Callback):
 
 def get_training_callbacks(names, base_path, model_name=None, dataloader=None, patch_size=128, cnt_viz=4, input_bias=True ):
     callbacks=[]
+    # callbacks =  tf.keras.callbacks.CallbackList()
     if 'ckeckpoint' in names:
         ckpt_dir = os.path.join(base_path, 'checkpoint', model_name)
         os.makedirs(ckpt_dir, exist_ok=True)
@@ -621,6 +627,10 @@ def get_training_callbacks(names, base_path, model_name=None, dataloader=None, p
                                            input_bias=input_bias)
         callbacks.append(callback_images)
     return callbacks
+
+
+
+
 
 
 

@@ -14,7 +14,7 @@ import matplotlib.pyplot as plt
 
 # from torch.utils.tensorboard import SummaryWriter
 
-from myutils_tf import bwutils, get_training_callbacks, load_checkpoint_if_exists
+from myutils_tf import bwutils, get_training_callbacks, load_checkpoint_if_exists, BwCkptCallback
 
 from mymodel_tf import save_as_tflite, GenerationTF
 
@@ -115,6 +115,8 @@ def main(args):
     print('=========================================================')
     print('========================================================= NGPU', NGPU)
 
+    if args.test:
+        batch_size = 1
     batch_size = batch_size * NGPU  # 128
     batch_size_eval = batch_size * NGPU
     batch_size_viz = batch_size  # 128
@@ -151,8 +153,6 @@ def main(args):
 
 
 
-
-
     cnt_train, cnt_valid = 92800, 4800 # w/o noise
     cnt_train, cnt_valid = 96200, 4800 # with noise
     if args.test:
@@ -163,9 +163,11 @@ def main(args):
 
     #########################
     ## training gogo
+
+    #if True:
+
     strategy = tf.distribute.MirroredStrategy()
     with strategy.scope():
-#     if True:
 
         if input_type not in ['shrink', 'nonshrink', 'nonshrink_4ch', 'rgb']:
             raise ValueError('unkown input_type, ', input_type)
@@ -203,6 +205,13 @@ def main(args):
                                             dataloader=dataset_viz, cnt_viz=cnt_viz)
 
 
+        ## last ckpt
+        ckptdir = model_dir+ '_saved'
+        print('ckptdir = ', ckptdir)
+        # os.makedirs(ckptdir, exist_ok=True)
+        ckpt_manager  = BwCkptCallback(model, optimizer, ckptdir, model_name )
+        callbacks.append(ckpt_manager)
+        # exit()
         # train gogo
         more_ckpt_ratio = 1
         model.fit(dataset_train,
@@ -241,7 +250,7 @@ if __name__ == '__main__':
     parser.add_argument(
             '--batch_size',
             type=int,
-            default=1,
+            default=32,
             # default=1,
             help='input patch size')
 
