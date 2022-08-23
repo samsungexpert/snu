@@ -1,4 +1,5 @@
 
+from multiprocessing.sharedctypes import Value
 import tensorflow as tf
 import tensorflow_addons as tfa
 import tensorflow.keras.backend as K
@@ -29,44 +30,43 @@ class GenerationTF():
 
     def __init__(self,
                  model_name='bwunet',
-                 input_shape=(64, 64, 4),
+                 input_shape=(128, 128, 3),
                  ch=(16, 32, 64, 128),
                  use_bn=True,
-                 add_noise_model_input=False,
-                 add_noise_dec_input=False
+                 kernel_regularizer=None,
+                 kernel_constraint=None,
                  ):
 
 
         self.input_shape = input_shape
         self.ch = ch
-        self.use_bn = use_bn
-        self.add_noise_model_input = add_noise_model_input
-        self.add_noise_dec_input = add_noise_dec_input
 
-        self.model_ae = self.ae()
-        self.model_aet = self.aet()
-        # self.model_ae_delta = self.ae_delta_bw()
-        # self.model_vae_delta = self.vae_delta_bw()
-        self.model_resnet_ed = self.resnet_ed()
-        self.model_resnet_flat = self.resnet_flat()
-        self.model_unet = self.unet_generator()
-        self.model_bwunet = self.bwunet()
+        self.use_bn = use_bn
+
+        self.kernel_regularizer = None
+        if kernel_regularizer != None:
+            self.kernel_regularizer = tf.keras.regularizers.L2(l2=0.01)
+
+        self.kernel_constraint = None
+        if kernel_constraint != None:
+            self.kernel_constraint = tf.keras.constraints.MinMaxNorm(
+                    min_value=0.0, max_value=kernel_constraint, rate=1.0, axis=[0, 1, 2] )
+            self.bias_constraint = tf.keras.constraints.MinMaxNorm(
+                    min_value=0.0, max_value=kernel_constraint, rate=1, axis=0)
 
         if model_name == 'bwunet':
-            self.model = self.bwunet()
-        elif  model_name == 'unet':
-            self.model = self.unet_generator()
+            self.model = self.bwunet(self.input_shape)
+        elif model_name == 'unet':
+            self.model = self.unet_generator(self.input_shape)
         elif model_name == 'resnet_ed':
-            self.model = self.resnet_ed()
+            self.model = self.resnet_ed(self.input_shape)
         elif model_name == 'resnet_flat':
-            self.model = self.resnet_flat()
-        elif model_name == 'ae':
-            self.model = self.ae()
-        elif model_name == 'aet':
-            self.model = self.aet()
+            self.model = self.resnet_flat(self.input_shape)
         else:
-            self.model = None
+            print('====================== unknown model name, ', model_name)
+            exit()
 
+        print(f'-----------> {model_name}, init done <-------------')
 
 
     def _myactivation_layer(self, activation='relu'):
@@ -96,13 +96,30 @@ class GenerationTF():
             ValueError('Undefined normalization type, ', type)
         return out
 
+
+    def conv2d(self, filters, kernel_size, strides=1, padding='same',
+                kernel_initializer='glorot_uniform', bias_initializer='zeros', use_bias=True,  activation=None, name=None):
+        return tf.keras.layers.Conv2D(filters, kernel_size, strides=strides, use_bias=use_bias,
+                                    kernel_initializer=kernel_initializer, bias_initializer=bias_initializer,
+                                    kernel_regularizer=self.kernel_regularizer, bias_regularizer=None,
+                                    kernel_constraint=self.kernel_constraint, bias_constraint=self.bias_constraint,
+                                    padding=padding, activation=activation, name=name)
+
+    def tconv2d(self, filters, kernel_size, strides=2, padding='same',
+                kernel_initializer='glorot_uniform', bias_initializer='zeros', use_bias=True,  activation=None, name=None):
+        return tf.keras.layers.Conv2DTranspose(filters=filters, kernel_size=kernel_size, strides=strides,use_bias=use_bias,
+                                            kernel_initializer=kernel_initializer, bias_initializer=bias_initializer,
+                                            kernel_regularizer=self.kernel_regularizer, bias_regularizer=None,
+                                            kernel_constraint=self.kernel_constraint, bias_constraint=self.bias_constraint,
+                                            padding=padding, activation=activation, name=name)
+
     def downsample(self, filters, size, norm='batch', apply_norm=True, activation='leakyrelu'):
 
         initializer = tf.random_normal_initializer(0., 0.02)
 
         result = tf.keras.Sequential()
         result.add(
-            tf.keras.layers.Conv2D(filters, size, strides=2, padding='same',
+            self.conv2d(filters, size, strides=2, padding='same',
                                     kernel_initializer=initializer, use_bias=True))
 
         if apply_norm:
@@ -119,11 +136,8 @@ class GenerationTF():
         initializer = tf.random_normal_initializer(0., 0.02)
 
         result = tf.keras.Sequential()
-        result.add(
-            tf.keras.layers.Conv2DTranspose(filters, size, strides=2,
-                                            padding='same',
-                                            kernel_initializer=initializer,
-                                            use_bias=True))
+        result.add(self.tconv2d(filters, size, strides=2, padding='same',
+                          kernel_initializer=initializer,use_bias=True))
 
         result.add(self._mynorm_layer(norm.lower()))
 
@@ -168,7 +182,8 @@ class GenerationTF():
         ]
 
         initializer = tf.random_normal_initializer(0., 0.02)
-        last = tf.keras.layers.Conv2DTranspose(
+
+        last = self.tconv2d(
             output_channels, 4, strides=2,
             padding='same', kernel_initializer=initializer,
             activation='tanh')  # (bs, 256, 256, 3)
@@ -199,7 +214,7 @@ class GenerationTF():
 
     def _enc_block(self, filters:int, kernek_size:int, strides:int=1, padding:str='same', pooling:str='max', norm:str='batch', name=None):
         def func(x):
-            enc = tf.keras.layers.Conv2D(filters, kernek_size, strides,
+            enc = self.conv2d(filters, kernek_size, strides,
                                              padding, activation=None, name=name)(x)
             enc = self._mynorm_layer(norm)(enc)
             enca = tf.keras.layers.PReLU(shared_axes=[1,2], name=name+'_prelu')(enc)
@@ -215,14 +230,14 @@ class GenerationTF():
 
     def _dec_block(self, filters:int, kernel_size:int, strides:int=2, padding:str='same', norm:str='batch', name=None):
         def func(x, res=None):
-            out = tf.keras.layers.Conv2DTranspose(filters=filters, kernel_size=kernel_size, strides=strides,
+            out = self.tconv2d(filters=filters, kernel_size=kernel_size, strides=strides,
                                             padding=padding, activation=None, name=name+'_tconv')(x)
             out = self._mynorm_layer(norm)(out)
             if res != None:
                 out = tf.keras.layers.Add()([out, res])
                 out = tf.keras.layers.PReLU(shared_axes=[1,2], name=name+'_prelua')(out)
 
-            out = tf.keras.layers.Conv2D(filters=filters//2,  kernel_size=kernel_size, strides=1,
+            out = self.conv2d(filters=filters//2,  kernel_size=kernel_size, strides=1,
                                          padding=padding, activation=None, name=name+'_conv')(out)
             out = self._mynorm_layer(norm)(out)
             out = tf.keras.layers.PReLU(shared_axes=[1,2], name=name+'_prelu')(out)
@@ -237,8 +252,6 @@ class GenerationTF():
 
         input = tf.keras.layers.Input(shape=input_shape, name='bwunet_input')
 
-        # emb = tf.keras.layers.Conv2D(filters=filters, kernek_size=kernel_size, strides=1, padding='same',
-        #                              activation=None, name='emb')(input)
         emb, emba, embp = self._enc_block(filters, kernel_size, strides=1, pooling=None, norm=None, name='emb')(input)   # (128, 128, 64)
 
         # encoder
@@ -262,7 +275,7 @@ class GenerationTF():
         # last
         last1, last1a, last1p = self._enc_block(filters//2, kernel_size, pooling=None, name='last1')(dec)
 
-        out = tf.keras.layers.Conv2D(filters=3, kernel_size=kernel_size, strides=1,
+        out = self.conv2d(filters=3, kernel_size=kernel_size, strides=1,
                                     padding='same', activation='tanh', name='last0')(last1p)
 
         model = tf.keras.Model(inputs=input, outputs=out, name='bwunet')
@@ -274,12 +287,12 @@ class GenerationTF():
         normlist = [None, 'batch', 'instance']
         assert norm in normlist, f'form should be in {normlist}, but {norm}'
 
-        out = tf.keras.layers.Conv2D(filters=nch, kernel_size=(3, 3), strides=(1, 1),
+        out = self.conv2d(filters=nch, kernel_size=(3, 3), strides=(1, 1),
                                     padding='same', activation=None, name=f'{ctype}_conv_{nblock}_1')(x)
         out = self._mynorm(out, norm, nblock, 1)
         out = tf.keras.layers.ReLU(name=f'enc_relu_{nblock}_1')(out)
 
-        out = tf.keras.layers.Conv2D(filters=nch, kernel_size=(3, 3), strides=(1, 1),
+        out = self.conv2d(filters=nch, kernel_size=(3, 3), strides=(1, 1),
                                     padding='same', activation=None, name=f'{ctype}_conv_{nblock}_2')(out)
         out = self._mynorm(out, norm, nblock, 2)
         out = tf.keras.layers.Add()([x, out])
@@ -291,12 +304,12 @@ class GenerationTF():
         input = tf.keras.layers.Input(shape=input_shape, name='resnet_flat_input')
 
 
-        out = tf.keras.layers.Conv2D(filters=nch,
-                                    kernel_size=(3, 3),
-                                    strides=(1,1),
-                                    padding='same',
-                                    activation='relu',
-                                    name='enc0')(input)
+        out = self.conv2d(filters=nch,
+                        kernel_size=(3, 3),
+                        strides=(1,1),
+                        padding='same',
+                        activation='relu',
+                        name='enc0')(input)
 
         rout = []
         for idx in range(nblocks):
@@ -305,23 +318,20 @@ class GenerationTF():
             if idx>nblocks//2:
                 out += rout[nblocks-1-idx]
 
-        # for idx in range(nblocks//2):
-        #     rout[nblocks-1-idx] += rout[idx]
 
-        # out += rout
-        out = tf.keras.layers.Conv2D(filters=nch,
-                                    kernel_size=(3, 3),
-                                    strides=(1,1),
-                                    padding='same',
-                                    activation='relu',
-                                    name='last1')(out)
+        out = self.conv2d(filters=nch,
+                        kernel_size=(3, 3),
+                        strides=(1,1),
+                        padding='same',
+                        activation='relu',
+                        name='last1')(out)
 
-        out = tf.keras.layers.Conv2D(filters=3,
-                                    kernel_size=(3, 3),
-                                    strides=(1,1),
-                                    padding='same',
-                                    activation='tanh',
-                                    name='last0')(out)
+        out = self.conv2d(filters=3,
+                        kernel_size=(3, 3),
+                        strides=(1,1),
+                        padding='same',
+                        activation='tanh',
+                        name='last0')(out)
 
         model = tf.keras.Model(inputs=input, outputs=out, name=f'resnet_flat_{nblocks}')
         return model
@@ -334,14 +344,12 @@ class GenerationTF():
         norm = 'batch'
         input = tf.keras.layers.Input(shape=input_shape, name='resnet_ed_input')
 
-
-
-        out = tf.keras.layers.Conv2D(filters=nch,
-                                    kernel_size=(7, 7),
-                                    strides=(1,1),
-                                    padding='same',
-                                    activation=None,
-                                    name='enc0')(input)
+        out = self.conv2d(filters=nch,
+                        kernel_size=(7, 7),
+                        strides=(1,1),
+                        padding='same',
+                        activation=None,
+                        name='enc0')(input)
 
         out = self._mynorm(out, type=norm, nblock=0, num=0)
         out = tf.keras.layers.ReLU(name='enc_relu0')(out)
@@ -362,141 +370,12 @@ class GenerationTF():
             out = self.upsample(filters=nch, size=3, activation='relu')(out)
 
         # Final block
-        out = tf.keras.layers.Conv2D(filters=3, kernel_size=(7, 7), strides=(1,1),
+        out = self.conv2d(filters=3, kernel_size=(7, 7), strides=(1,1),
                                     padding='same', activation='tanh', name='final')(out)
+
         model = tf.keras.models.Model(input, out, name=f'resnet_ed_{num_residual_blocks}')
         return model
 
-
-    def ae(self, input_shape=(64, 64, 4)):
-        ch = self.ch
-
-        input = tf.keras.layers.Input(shape=input_shape, name='input')
-
-
-        ## encoder
-        # enc1
-        x1 = tf.keras.layers.Conv2D(filters=ch[0], kernel_size=(3, 3), strides=(1, 1),
-                                    padding='same', activation='relu', name='enc_conv1')(input)
-        # enc2
-        x2 = tf.keras.layers.Conv2D(filters=ch[1], kernel_size=(3, 3), strides=(2, 2),
-                                    padding='same', activation='relu', name='enc_conv2')(x1)
-        # enc3
-        x3 = tf.keras.layers.Conv2D(filters=ch[2], kernel_size=(3, 3), strides=(2, 2),
-                                    padding='same', activation='relu', name='enc_conv3')(x2)
-
-        # enc4
-        x4 = tf.keras.layers.Conv2D(filters=ch[3], kernel_size=(3, 3), strides=(2, 2),
-                                    padding='same', activation='relu', name='enc_conv4')(x3)
-
-
-        if self.use_bn == True:
-            print('encoder output is batch normalized!!!')
-            x4 = tf.keras.layers.BatchNormalization(name='enc_bn')(x4)
-
-
-
-
-        ## decoder
-        # dec3
-        x = tf.keras.layers.Conv2DTranspose(filters=ch[2], kernel_size=(3, 3), strides=(2, 2),
-                                            bias_initializer='glorot_uniform',
-                                            padding='same', activation='relu', name='dec_tconv3')(x4)
-        x = tf.keras.layers.Conv2D(filters=ch[2], kernel_size=(3, 3), strides=(1, 1),
-                                   padding='same', activation='relu', name='dec_tconv3_conv1')(x)
-
-        # dec2
-        x = tf.keras.layers.Conv2DTranspose(filters=ch[1], kernel_size=(3, 3), strides=(2, 2),
-                                            bias_initializer='glorot_uniform',
-                                            padding='same', activation='relu', name='dec_tconv2')(x)
-
-        x = tf.keras.layers.Conv2D(filters=ch[1], kernel_size=(3, 3), strides=(1, 1),
-                                   padding='same', activation='relu', name='dec_tconv2_conv1')(x)
-
-        # dec1
-        x = tf.keras.layers.Conv2DTranspose(filters=ch[0], kernel_size=(3, 3), strides=(2, 2),
-                                            bias_initializer='glorot_uniform',
-                                            padding='same', activation=None, name='dec_tconv1')(x)
-
-        x = tf.keras.layers.Add()([x, x1 ])
-
-        x = tf.keras.layers.Conv2D(filters=ch[0], kernel_size=(3, 3), strides=(1, 1),
-                                   padding='same', activation='relu', name='dec_tconv1_conv1')(x)
-
-        # last
-        x = tf.keras.layers.Conv2DTranspose(filters=ch[0], kernel_size=(3, 3), strides=(2, 2),
-                                            bias_initializer='glorot_uniform',
-                                            padding='same', activation=None, name='dec_tconv_last')(x)
-        x = tf.keras.layers.Conv2D(filters=3, kernel_size=(3, 3), strides=(1, 1),
-                                   padding='same', activation=None, name='dec_conv_last')(x)
-
-        model = tf.keras.models.Model(input, x, name='ae')
-
-        return model
-
-
-    def aet(self, input_shape=(128, 128, 3)):
-        ch = self.ch
-
-        input = tf.keras.layers.Input(shape=input_shape, name='input')
-
-
-        ## encoder
-        # enc1
-        x1 = tf.keras.layers.Conv2D(filters=ch[0], kernel_size=(3, 3), strides=(1, 1),
-                                    padding='same', activation='relu', name='enc_conv1')(input)
-        # enc2
-        x2 = tf.keras.layers.Conv2D(filters=ch[1], kernel_size=(3, 3), strides=(2, 2),
-                                    padding='same', activation='relu', name='enc_conv2')(x1)
-        # enc3
-        x3 = tf.keras.layers.Conv2D(filters=ch[2], kernel_size=(3, 3), strides=(2, 2),
-                                    padding='same', activation='relu', name='enc_conv3')(x2)
-
-        # enc4
-        x4 = tf.keras.layers.Conv2D(filters=ch[3], kernel_size=(3, 3), strides=(2, 2),
-                                    padding='same', activation='relu', name='enc_conv4')(x3)
-
-
-        if self.use_bn == True:
-            print('encoder output is batch normalized!!!')
-            x4 = tf.keras.layers.BatchNormalization(name='enc_bn')(x4)
-
-
-
-
-        ## decoder
-        # dec3
-        x = tf.keras.layers.Conv2DTranspose(filters=ch[2], kernel_size=(3, 3), strides=(2, 2),
-                                            bias_initializer='glorot_uniform',
-                                            padding='same', activation='relu', name='dec_tconv3')(x4)
-        x = tf.keras.layers.Conv2D(filters=ch[2], kernel_size=(3, 3), strides=(1, 1),
-                                   padding='same', activation='relu', name='dec_tconv3_conv1')(x)
-
-        # dec2
-        x = tf.keras.layers.Conv2DTranspose(filters=ch[1], kernel_size=(3, 3), strides=(2, 2),
-                                            bias_initializer='glorot_uniform',
-                                            padding='same', activation='relu', name='dec_tconv2')(x)
-
-        x = tf.keras.layers.Conv2D(filters=ch[1], kernel_size=(3, 3), strides=(1, 1),
-                                   padding='same', activation='relu', name='dec_tconv2_conv1')(x)
-
-        # dec1
-        x = tf.keras.layers.Conv2DTranspose(filters=ch[0], kernel_size=(3, 3), strides=(2, 2),
-                                            bias_initializer='glorot_uniform',
-                                            padding='same', activation=None, name='dec_tconv1')(x)
-
-        x = tf.keras.layers.Add()([x, x1 ])
-
-        x = tf.keras.layers.Conv2D(filters=ch[0], kernel_size=(3, 3), strides=(1, 1),
-                                   padding='same', activation='relu', name='dec_tconv1_conv1')(x)
-
-        # last
-        x = tf.keras.layers.Conv2D(filters=3, kernel_size=(3, 3), strides=(1, 1),
-                                   padding='same', activation=None, name='dec_conv_last')(x)
-
-        model = tf.keras.models.Model(input, x, name='aet')
-
-        return model
 
 
 
@@ -508,14 +387,25 @@ class GenerationTF():
 def main():
 
 
+    model_name = []
+    model_name.append('bwunet')
+    model_name.append('unet')
+    model_name.append('resnet_ed')
+    model_name.append('resnet_flat')
+    for mn in model_name:
+        print('model_name = ', mn)
+        bw = GenerationTF(model_name= mn, kernel_regularizer=True, kernel_constraint=True)
+    # # save_as_tflite(bw.model, name=f'model_{model_name}' )
+        bw.model.save(f'{mn}_sw.h5')
 
-    model_name = 'resnet_ed'
-    model_name = 'resnet_flat'
+
+    # model_name = 'resnet_ed'
+    # model_name = 'resnet_flat'
     # model_name = 'bwunet'
-    # model_net = 'unet'
-
-    bw = GenerationTF(model_name =  model_name)
-    save_as_tflite(bw.model, name=f'model_{model_name}' )
+    # model_name = 'unet'
+    # bw = GenerationTF(model_name =  model_name, kernel_regularizer=True, kernel_constraint=True)
+    # # save_as_tflite(bw.model, name=f'model_{model_name}' )
+    # bw.model.save('sw.h5')
 
     # a = None
     # print(isinstance (a, str))

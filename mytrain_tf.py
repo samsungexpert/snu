@@ -175,7 +175,7 @@ def main(args):
         ## Get model gogo
         #####################
 
-        bw = GenerationTF(model_name =  model_name)
+        bw = GenerationTF(model_name =  model_name, kernel_regularizer=True, kernel_constraint=True)
 
         model = bw.model
         if False:
