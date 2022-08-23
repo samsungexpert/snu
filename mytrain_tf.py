@@ -12,11 +12,8 @@ import datetime
 import numpy as np
 import matplotlib.pyplot as plt
 
-# from torch.utils.tensorboard import SummaryWriter
-
-from myutils_tf import bwutils, get_training_callbacks, load_checkpoint_if_exists, BwCkptCallback
-
 from mymodel_tf import save_as_tflite, GenerationTF
+from myutils_tf import *
 
 # os.environ["CUDA_VISIBLE_DEVICES"]='-1'
 # To use limit number of GPU
@@ -37,7 +34,7 @@ MODEL_NAME = __file__.split('.')[0]  # 'model_tetra_out_model_tetra_12ch'
 
 
 # for Adam
-LEARNING_RATE = 1e-4
+LEARNING_RATE = 2e-3
 WEIGHT_DECAY = 1e-8
 INTERVAL = 600
 
@@ -164,10 +161,10 @@ def main(args):
     #########################
     ## training gogo
 
-    #if True:
+    if True:
 
-    strategy = tf.distribute.MirroredStrategy()
-    with strategy.scope():
+    # strategy = tf.distribute.MirroredStrategy()
+    # with strategy.scope():
 
         if input_type not in ['shrink', 'nonshrink', 'nonshrink_4ch', 'rgb']:
             raise ValueError('unkown input_type, ', input_type)
@@ -200,7 +197,9 @@ def main(args):
         callbacks = get_training_callbacks(['ckeckpoint', 'tensorboard', 'image'],
                                             base_path=base_path, model_name=model_name + model_sig,
                                             dataloader=dataset_viz, cnt_viz=cnt_viz)
-
+        ## lr callback
+        callback_lr = get_scheduler(type='cosinerestart', lr_init=LEARNING_RATE)
+        callbacks.append(callback_lr)
 
         # train gogo
         more_ckpt_ratio = 1
@@ -240,8 +239,8 @@ if __name__ == '__main__':
     parser.add_argument(
             '--batch_size',
             type=int,
-            default=32,
-            # default=1,
+            # default=32,
+            default=1,
             help='input patch size')
 
     parser.add_argument(
