@@ -196,22 +196,12 @@ def main(args):
 
 
 
-
-
-
         ## callbacks for training loop
         callbacks = get_training_callbacks(['ckeckpoint', 'tensorboard', 'image'],
                                             base_path=base_path, model_name=model_name + model_sig,
                                             dataloader=dataset_viz, cnt_viz=cnt_viz)
 
 
-        ## last ckpt
-        ckptdir = model_dir+ '_saved'
-        print('ckptdir = ', ckptdir)
-        # os.makedirs(ckptdir, exist_ok=True)
-        ckpt_manager  = BwCkptCallback(model, optimizer, ckptdir, model_name )
-        callbacks.append(ckpt_manager)
-        # exit()
         # train gogo
         more_ckpt_ratio = 1
         model.fit(dataset_train,
@@ -265,12 +255,6 @@ if __name__ == '__main__':
             type=int,
             default=128,
             help='input patch size')
-
-    parser.add_argument(
-            '--use_bn',
-            type=str,
-            default='True',
-            help='use batch normalization on the enc output')
 
     parser.add_argument(
             '--model_name',
