@@ -15,7 +15,7 @@ model*
 *.tflite
 *.h5
 *.npy
-
+*.bak
 
 .DS_Store
 # C extensions

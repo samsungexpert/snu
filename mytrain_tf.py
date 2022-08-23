@@ -92,10 +92,8 @@ def main(args):
 
 
     ## dataset
-    # data_path = '/dataset/MIT/tfrecords_data_only'
-    # data_path = 'datasets/pixelshift/tfrecords'
-    # data_path = '/home/team19/datasets/pixelshift/tfrecords'
-
+    if args.test:
+        data_path = 'datasets/pixelshift/tfrecords'
     def get_tfrecords(path, keyword):
         files = tf.io.gfile.glob(os.path.join(path, f'*{keyword}*tfrecords'))
         files.sort()
@@ -157,7 +155,8 @@ def main(args):
 
     cnt_train, cnt_valid = 92800, 4800 # w/o noise
     cnt_train, cnt_valid = 96200, 4800 # with noise
-#     cnt_train, cnt_valid = 8, 8 # for test
+    if args.test:
+        cnt_train, cnt_valid = 8, 8 # for test
 
     cnt_viz = 10
 
@@ -281,8 +280,13 @@ if __name__ == '__main__':
             type=str,
             default='/home/team19/datasets/pixelshift/tfrecords',
         #     default='/data03/team01/pixelshift/tfrecords',
-        #     default='datasets/pixelshift/tfrecords',
             help='add noise on dec input')
+
+    parser.add_argument(
+            '--test',
+            type=bool,
+            default=True,
+            help='test')
 
     args = parser.parse_args()
 
