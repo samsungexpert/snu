@@ -277,7 +277,7 @@ if __name__ == '__main__':
     parser.add_argument(
             '--test',
             type=bool,
-            default=True,
+            default=False,
             help='test')
 
     args = parser.parse_args()
