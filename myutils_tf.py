@@ -631,20 +631,37 @@ def get_training_callbacks(names, base_path, model_name=None, dataloader=None, p
 
 
 def get_scheduler(type='cosine', lr_init=2e-3, lr_last=1e-5, steps=100):
-    if type.lower == 'cosine':
-        scheduler =tf.keras.optimizers.schedules.CosineDecay(
-                            initial_learning_rate=lr_init,
-                            decay_steps=steps,
-                            alpha=lr_last,
-                            name='CosineDecay')
+
+    if float(tf._version__[:-2]) > 2.4:
+        if type.lower == 'cosine':
+            scheduler =tf.keras.optimizers.schedules.CosineDecay(
+                                initial_learning_rate=lr_init,
+                                decay_steps=steps,
+                                alpha=lr_last,
+                                name='CosineDecay')
+        else:
+            scheduler = tf.keras.optimizers.schedules.CosineDecayRestarts(
+                                initial_learning_rate=lr_init,
+                                first_decay_steps=steps,
+                                t_mul=2.0,
+                                m_mul=1.0,
+                                alpha=lr_last,
+                                name='CosineDecayRestarts')
     else:
-        scheduler = tf.keras.optimizers.schedules.CosineDecayRestarts(
-                            initial_learning_rate=lr_init,
-                            first_decay_steps=steps,
-                            t_mul=2.0,
-                            m_mul=1.0,
-                            alpha=lr_last,
-                            name='CosineDecayRestarts')
+        if type.lower == 'cosine':
+            scheduler =tf.keras.experimental.CosineDecay(
+                                initial_learning_rate=lr_init,
+                                decay_steps=steps,
+                                alpha=lr_last,
+                                name='CosineDecay')
+        else:
+            scheduler = tf.keras.experimental.CosineDecayRestarts(
+                                initial_learning_rate=lr_init,
+                                first_decay_steps=steps,
+                                t_mul=2.0,
+                                m_mul=1.0,
+                                alpha=lr_last,
+                                name='CosineDecayRestarts')
 
 
     lr_callback =  tf.keras.callbacks.LearningRateScheduler(scheduler, verbose=1)
