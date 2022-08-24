@@ -58,6 +58,8 @@ class GenerationTF():
             self.model = self.bwunet(self.input_shape)
         elif model_name == 'unet':
             self.model = self.unet_generator(self.input_shape)
+        elif model_name == 'unetv2':
+            self.model = self.unet_generator(self.input_shape, mix=True)
         elif model_name == 'resnet_ed':
             self.model = self.resnet_ed(self.input_shape)
         elif model_name == 'resnet_flat':
@@ -156,7 +158,7 @@ class GenerationTF():
         return result
 
 
-    def unet_generator(self, input_shape=(128, 128, 3), output_channels=3, norm='batch'):
+    def unet_generator(self, input_shape=(128, 128, 3), output_channels=3, norm='batch', mix=False):
 
 
 
@@ -183,10 +185,19 @@ class GenerationTF():
 
         initializer = tf.random_normal_initializer(0., 0.02)
 
-        last = self.tconv2d(
-            output_channels, 4, strides=2,
-            padding='same', kernel_initializer=initializer,
-            activation='tanh')  # (bs, 256, 256, 3)
+        if mix == False:
+            last = self.tconv2d(
+                filters=output_channels, kernel_size=4, strides=2,
+                padding='same', kernel_initializer=initializer,
+                activation='tanh', name='unet_last')  # (bs, 256, 256, 3)
+        else:
+            last1 = self.tconv2d(
+                filters=64, kernel_size=4, strides=2,
+                padding='same', kernel_initializer=initializer,
+                activation='relu')  # (bs, 256, 256, 3)
+
+            last0 = self.conv2d(filters=output_channels, kernel_size=3, strides=1,
+                                            padding='same', activation='tanh', name='unet_last')
 
         concat = tf.keras.layers.Concatenate()
 
@@ -207,7 +218,11 @@ class GenerationTF():
             # x = concat([x, skip])
             x = tf.keras.layers.Concatenate()([x, skip])
 
-        x = last(x)
+        if mix == False:
+            x = last(x)
+        else:
+            x = last1(x)
+            x = last0(x)
 
         return tf.keras.Model(inputs=inputs, outputs=x, name='unet')
 
@@ -388,6 +403,7 @@ def main():
 
 
     model_name = []
+    model_name.append('unetv2')
     model_name.append('bwunet')
     model_name.append('unet')
     model_name.append('resnet_ed')
@@ -395,8 +411,9 @@ def main():
     for mn in model_name:
         print('model_name = ', mn)
         bw = GenerationTF(model_name= mn, kernel_regularizer=True, kernel_constraint=True)
-    # # save_as_tflite(bw.model, name=f'model_{model_name}' )
-        bw.model.save(f'{mn}_sw.h5')
+        # bw.model.save(f'{mn}_sw.h5')
+        # bw.model.input.set_shape(1 + bw.model.input.shape[1:])
+        save_as_tflite(bw.model, name=f'{mn}_sw' )
 
 
     # model_name = 'resnet_ed'

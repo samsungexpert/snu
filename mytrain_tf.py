@@ -262,8 +262,8 @@ if __name__ == '__main__':
     parser.add_argument(
             '--model_name',
             type=str,
-            default='bwunet',
-            help='resnet_flat, resnet_ed, bwunet, unet')
+            default='unetv2',
+            help='resnet_flat, resnet_ed, bwunet, unet, unetv2')
 
     parser.add_argument(
             '--model_sig',
