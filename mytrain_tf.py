@@ -70,6 +70,11 @@ def main(args):
     # loss_type = ['yuv']
 
     # get util class
+    if args.test:
+        cache_enable=False
+    else:
+        cache_enable=True
+
     utils = bwutils(input_type,
                     cfa_pattern='tetra',
                     patch_size=patch_size,
@@ -78,7 +83,7 @@ def main(args):
                     loss_type=loss_type, # 'rgb', 'yuv', 'ploss'
                     loss_mode='2norm',
                     loss_scale=1e4,
-                    cache_enable=False)
+                    cache_enable=cache_enable)
 
 
 
@@ -114,10 +119,10 @@ def main(args):
 
     if args.test:
         batch_size = 1
-    batch_size = batch_size * NGPU  # 128
+    batch_size      = batch_size * NGPU  # 128
     batch_size_eval = batch_size * NGPU
-    batch_size_viz = batch_size  # 128
-    batch_size_viz = 10
+    batch_size_viz  = batch_size  # 128
+    batch_size_viz  = 10
     print(batch_size, batch_size_eval, batch_size_viz)
     # exit()
     train_params = {'filenames': train_files,
@@ -239,8 +244,7 @@ if __name__ == '__main__':
     parser.add_argument(
             '--batch_size',
             type=int,
-            # default=32,
-            default=1,
+            default=32,
             help='input patch size')
 
     parser.add_argument(
