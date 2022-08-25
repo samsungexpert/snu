@@ -34,7 +34,7 @@ MODEL_NAME = __file__.split('.')[0]  # 'model_tetra_out_model_tetra_12ch'
 
 
 # for Adam
-LEARNING_RATE = 1e-3
+LEARNING_RATE = 2e-3
 WEIGHT_DECAY = 1e-8
 INTERVAL = 600
 
@@ -203,7 +203,7 @@ def main(args):
                                             base_path=base_path, model_name=model_name + model_sig,
                                             dataloader=dataset_viz, cnt_viz=cnt_viz, initial_value_threshold=prev_loss)
         ## lr callback
-        callback_lr = get_scheduler(type='cosine', lr_init=LEARNING_RATE)
+        callback_lr = get_scheduler(type='cosine', lr_init=LEARNING_RATE, steps=myepoch)
         callbacks.append(callback_lr)
 
         # train gogo

@@ -597,7 +597,7 @@ class TensorBoardImage(Callback):
     def on_epoch_end(self, epoch, logs={}):
         self.write_image('Images', epoch)
 
-def get_training_callbacks(names, base_path, model_name=None, dataloader=None, patch_size=128, cnt_viz=4, input_bias=True, initial_value_threshold=initial_value_threshold):
+def get_training_callbacks(names, base_path, model_name=None, dataloader=None, patch_size=128, cnt_viz=4, input_bias=True, initial_value_threshold=np.inf):
     callbacks=[]
     # callbacks =  tf.keras.callbacks.CallbackList()
     if 'ckeckpoint' in names:
@@ -642,10 +642,10 @@ def get_scheduler(type='cosine', lr_init=2e-3, lr_last=1e-5, steps=100):
             scheduler =tf.keras.optimizers.schedules.CosineDecay(
                                 initial_learning_rate=lr_init,
                                 decay_steps=steps,
-                                alpha=0,
+                                alpha=0.5,
                                 name='CosineDecay')
         else:
-             print('-------------------> WTF scheduler type1, ', type, type =='cosine')
+            print('-------------------> WTF scheduler type1, ', type, type =='cosine')
             scheduler = tf.keras.optimizers.schedules.CosineDecayRestarts(
                                 initial_learning_rate=lr_init,
                                 first_decay_steps=steps,
@@ -659,10 +659,10 @@ def get_scheduler(type='cosine', lr_init=2e-3, lr_last=1e-5, steps=100):
             scheduler =tf.keras.experimental.CosineDecay(
                                 initial_learning_rate=lr_init,
                                 decay_steps=steps,
-                                alpha=0,
+                                alpha=0.5,
                                 name='CosineDecay')
         else:
-             print('-------------------> WTF scheduler type2, ', type)
+            print('-------------------> WTF scheduler type2, ', type)
             scheduler = tf.keras.experimental.CosineDecayRestarts(
                                 initial_learning_rate=lr_init,
                                 first_decay_steps=steps,
