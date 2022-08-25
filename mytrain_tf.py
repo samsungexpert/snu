@@ -34,7 +34,7 @@ MODEL_NAME = __file__.split('.')[0]  # 'model_tetra_out_model_tetra_12ch'
 
 
 # for Adam
-LEARNING_RATE = 2e-3
+LEARNING_RATE = 1e-3
 WEIGHT_DECAY = 1e-8
 INTERVAL = 600
 
@@ -193,17 +193,17 @@ def main(args):
 
 
         ## load pre-trained model
-        trained_model_file_name = '00003_resnet_flat_2.89940e-09_1.h5'
-        model, prev_epoch = load_checkpoint_if_exists(model, model_dir, model_name, trained_model_file_name)
+        trained_model_file_name = '00003_resnet_flat_2.89940e-09.h5'
+        model, prev_epoch, prev_loss = load_checkpoint_if_exists(model, model_dir, model_name, trained_model_file_name)
 
 
 
         ## callbacks for training loop
         callbacks = get_training_callbacks(['ckeckpoint', 'tensorboard', 'image'],
                                             base_path=base_path, model_name=model_name + model_sig,
-                                            dataloader=dataset_viz, cnt_viz=cnt_viz)
+                                            dataloader=dataset_viz, cnt_viz=cnt_viz, initial_value_threshold=prev_loss)
         ## lr callback
-        callback_lr = get_scheduler(type='cosinerestart', lr_init=LEARNING_RATE)
+        callback_lr = get_scheduler(type='cosine', lr_init=LEARNING_RATE)
         callbacks.append(callback_lr)
 
         # train gogo

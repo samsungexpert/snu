@@ -24,6 +24,7 @@ TF_VER=1 if tf.__version__.split('.')[0]=='1' else (2 if tf.__version__.split('.
 def load_checkpoint_if_exists(model, model_dir, model_name, ckpt_name=None):
     prev_epoch = 0
 
+    prev_loss = np.inf
     trained_model_file_name = os.path.join(model_dir, ckpt_name)
     if (ckpt_name != None ) and \
        (os.path.isfile(trained_model_file_name) and os.path.exists(trained_model_file_name)):
@@ -32,6 +33,7 @@ def load_checkpoint_if_exists(model, model_dir, model_name, ckpt_name=None):
         model.load_weights(trained_model_file_name)
         idx = trained_weights.rfind(model_name)
         prev_epoch = int(trained_weights[idx-6:idx-1])
+        prev_loss = float(trained_weights.split('_')[-1][:-3])
 
         # raise ValueError('unkown trained weight', trained_model_file_name)
     else:
@@ -48,11 +50,12 @@ def load_checkpoint_if_exists(model, model_dir, model_name, ckpt_name=None):
             model.load_weights(trained_weights)
             idx = trained_weights.rfind(model_name)
             prev_epoch = int(trained_weights[idx-6:idx-1])
+            prev_loss = float(trained_weights.split('_')[-1][:-3])
             print('prev epoch', prev_epoch)
         else:
             print('===========> TRAINED WEIGHTS NOT EXIST', len(trained_weights))
 
-    return model, prev_epoch
+    return model, prev_epoch, prev_loss
 
 
 
@@ -429,11 +432,12 @@ class bwutils():
     def dataset_input_fn(self, params):
         dataset = tf.data.TFRecordDataset(params['filenames'])
 
+
+        dataset = dataset.map(partial(self.parse_tfrecord, mode=params['mode']), num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
         # Dataset cache need 120 Main memory
         if self.cache_enable is True:
             dataset = dataset.cache()
-
-        dataset = dataset.map(partial(self.parse_tfrecord, mode=params['mode']), num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
         if params['mode'] == tf.estimator.ModeKeys.TRAIN:
             dataset = dataset.shuffle(params['shuffle_buff']).repeat()
@@ -593,21 +597,20 @@ class TensorBoardImage(Callback):
     def on_epoch_end(self, epoch, logs={}):
         self.write_image('Images', epoch)
 
-def get_training_callbacks(names, base_path, model_name=None, dataloader=None, patch_size=128, cnt_viz=4, input_bias=True ):
+def get_training_callbacks(names, base_path, model_name=None, dataloader=None, patch_size=128, cnt_viz=4, input_bias=True, initial_value_threshold=initial_value_threshold):
     callbacks=[]
     # callbacks =  tf.keras.callbacks.CallbackList()
     if 'ckeckpoint' in names:
         ckpt_dir = os.path.join(base_path, 'checkpoint', model_name)
         os.makedirs(ckpt_dir, exist_ok=True)
-        ckeckpoint_dir = os.path.join(ckpt_dir, '{epoch:05d}_%s_{loss:.5e}_1.h5' % (model_name))
+        ckeckpoint_dir = os.path.join(ckpt_dir, '{epoch:05d}_%s_{loss:.5e}.h5' % (model_name))
         callback_ckpt = tf.keras.callbacks.ModelCheckpoint(
                                 filepath = ckeckpoint_dir,
-                                # filepath=model_dir + '/models/{epoch:05d}_%s_{loss:.5e}_1.h5' % (MODEL_NAME),
-                                # the `val_loss` score has improved.
+                                monitor='val_loss',
+                                verbose=1,                                
                                 save_best_only=True,
-                                save_weights_only=False,
-                                monitor='val_loss',  # 'val_mse_yuv_loss',
-                                verbose=1)
+                                save_weights_only=False,                                
+                                initial_value_threshold=initial_value_threshold )
         callbacks.append(callback_ckpt)
     if 'tensorboard' in names:
         tb_dir = os.path.join(base_path, 'board', model_name)
@@ -631,15 +634,18 @@ def get_training_callbacks(names, base_path, model_name=None, dataloader=None, p
 
 
 def get_scheduler(type='cosine', lr_init=2e-3, lr_last=1e-5, steps=100):
+    print('-------------------> scheduler type, ', type)
 
-    if float(tf._version__[:-2]) > 2.4:
-        if type.lower == 'cosine':
+    if float(tf.__version__[:-2]) > 2.4:
+        if type.lower() == 'cosine':
+            print('-------------------> GOOD scheduler type1, ', type)
             scheduler =tf.keras.optimizers.schedules.CosineDecay(
                                 initial_learning_rate=lr_init,
                                 decay_steps=steps,
-                                alpha=lr_last,
+                                alpha=0,
                                 name='CosineDecay')
         else:
+             print('-------------------> WTF scheduler type1, ', type, type =='cosine')
             scheduler = tf.keras.optimizers.schedules.CosineDecayRestarts(
                                 initial_learning_rate=lr_init,
                                 first_decay_steps=steps,
@@ -648,13 +654,15 @@ def get_scheduler(type='cosine', lr_init=2e-3, lr_last=1e-5, steps=100):
                                 alpha=lr_last,
                                 name='CosineDecayRestarts')
     else:
-        if type.lower == 'cosine':
+        if type.lower() == 'cosine':
+            print('-------------------> GOOD scheduler type2, ', type)
             scheduler =tf.keras.experimental.CosineDecay(
                                 initial_learning_rate=lr_init,
                                 decay_steps=steps,
-                                alpha=lr_last,
+                                alpha=0,
                                 name='CosineDecay')
         else:
+             print('-------------------> WTF scheduler type2, ', type)
             scheduler = tf.keras.experimental.CosineDecayRestarts(
                                 initial_learning_rate=lr_init,
                                 first_decay_steps=steps,
