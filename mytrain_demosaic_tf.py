@@ -63,16 +63,28 @@ def main(args):
     model_sig = args.model_sig
     myepoch = args.epoch
 
-
-
     loss_type = ['rgb', 'yuv', 'ssim']  # 'rgb', 'yuv', 'ploss
 
+
+    if 'mit' in data_path:
+        input_bits = 8
+        input_max = 255
+        data_path = '/home/team19/datasets/mit/tfrecords'
+        # data_path = '/data03/team01/mit/tfrecords'
+    elif 'pixelshift' in data_path:
+        input_bits = 16
+        input_max = 65535
+        data_path = '/home/team19/datasets/pixelshift/tfrecords'
+        # data_path = '/data03/team01/pixelshift/tfrecords'
+    else:
+        ValueError('unknown data path', data_path)
+        exit()
 
 
     ## dataset
     if args.test:
         data_path = 'datasets/mit/tfrecords'
-        data_path = 'datasets/pixelshift/tfrecords'
+        # data_path = 'datasets/pixelshift/tfrecords'
     def get_tfrecords(path, keyword):
         files = tf.io.gfile.glob(os.path.join(path, f'*{keyword}*tfrecords'))
         files.sort()
@@ -86,13 +98,6 @@ def main(args):
     print('\n'.join(eval_files))
     print('\n'.join(viz_files))
 
-    if 'mit' in data_path:
-        input_bits = 8
-    elif 'pixelshift' in data_path:
-        input_bits = 16
-    else:
-        ValueError('unknown data path', data_path)
-        exit()
 
     # get util class
     if args.test:
@@ -106,6 +111,7 @@ def main(args):
                     crop_size=patch_size,
                     input_max=input_max,
                     input_bits=input_bits,
+                    input_bias = args.input_bias,
                     loss_type=loss_type, # 'rgb', 'yuv', 'ploss'
                     loss_mode='2norm',
                     loss_scale=1e4,
@@ -182,10 +188,10 @@ def main(args):
     #########################
     ## training gogo
 
-    if True:
+    # if True:
 
-    # strategy = tf.distribute.MirroredStrategy()
-    # with strategy.scope():
+    strategy = tf.distribute.MirroredStrategy()
+    with strategy.scope():
 
         if input_type not in ['raw_1ch', 'rgb']:
             raise ValueError('unkown input_type, ', input_type)
@@ -216,7 +222,7 @@ def main(args):
 
         ## callbacks for training loop
         callbacks = get_training_callbacks(['ckeckpoint', 'tensorboard', 'image'],
-                                            base_path=base_path, model_name=model_name + model_sig,
+                                            base_path=base_path, model_name=model_name + model_sig, input_bias = args.input_bias,
                                             dataloader=dataset_viz, cnt_viz=cnt_viz, initial_value_threshold=prev_loss)
         ## lr callback
         callback_lr = get_scheduler(type='cosine', lr_init=LEARNING_RATE, steps=myepoch)
@@ -295,6 +301,12 @@ if __name__ == '__main__':
             # default='/home/team19/datasets/mit/tfrecords',
             # default='/data03/team01/mit/tfrecords',
             help='add noise on dec input')
+
+    parser.add_argument(
+            '--input_bias',
+            type=bool,
+            default=False,
+            help='test')
 
     parser.add_argument(
             '--test',
