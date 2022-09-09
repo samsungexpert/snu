@@ -11,7 +11,6 @@ import glob
 import datetime
 import numpy as np
 import matplotlib.pyplot as plt
-import data
 
 from mymodel_tf import save_as_tflite, GenerationTF
 from myutils_tf import *
