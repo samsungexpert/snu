@@ -415,7 +415,12 @@ class bwutils():
         return image_gamma, image
 
     def parse_tfrecord_demosaic(self, example, mode):
-        image = self.get_image_from_single_example(example, key='image', num_channels=3, dtype='uint8')
+        if self.input_bits == 8:
+            dtype = 'uint8'
+        elif self.input_bits == 16:
+            dtype = 'uint16'
+
+        image = self.get_image_from_single_example(example, key='image', num_channels=3, dtype=dtype)
         if mode == tf.estimator.ModeKeys.TRAIN:
             image = self.data_augmentation(image)
 

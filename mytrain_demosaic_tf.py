@@ -11,6 +11,7 @@ import glob
 import datetime
 import numpy as np
 import matplotlib.pyplot as plt
+import data
 
 from mymodel_tf import save_as_tflite, GenerationTF
 from myutils_tf import *
@@ -66,6 +67,33 @@ def main(args):
 
     loss_type = ['rgb', 'yuv', 'ssim']  # 'rgb', 'yuv', 'ploss
 
+
+
+    ## dataset
+    if args.test:
+        data_path = 'datasets/mit/tfrecords'
+        data_path = 'datasets/pixelshift/tfrecords'
+    def get_tfrecords(path, keyword):
+        files = tf.io.gfile.glob(os.path.join(path, f'*{keyword}*tfrecords'))
+        files.sort()
+        return files
+    train_files = get_tfrecords(data_path, 'train')
+    eval_files = get_tfrecords(data_path, 'test')
+    viz_files = get_tfrecords(data_path, 'viz')
+
+    print('data_path, ', data_path)
+    print('\n'.join(train_files))
+    print('\n'.join(eval_files))
+    print('\n'.join(viz_files))
+
+    if 'mit' in data_path:
+        input_bits = 8
+    elif 'pixelshift' in data_path:
+        input_bits = 16
+    else:
+        ValueError('unknown data path', data_path)
+        exit()
+
     # get util class
     if args.test:
         cache_enable=False
@@ -77,6 +105,7 @@ def main(args):
                     patch_size=patch_size,
                     crop_size=patch_size,
                     input_max=input_max,
+                    input_bits=input_bits,
                     loss_type=loss_type, # 'rgb', 'yuv', 'ploss'
                     loss_mode='2norm',
                     loss_scale=1e4,
@@ -90,21 +119,7 @@ def main(args):
 
 
 
-    ## dataset
-    if args.test:
-        data_path = 'datasets/mit/tfrecords'
-    def get_tfrecords(path, keyword):
-        files = tf.io.gfile.glob(os.path.join(path, f'*{keyword}*tfrecords'))
-        files.sort()
-        return files
-    train_files = get_tfrecords(data_path, 'train')
-    eval_files = get_tfrecords(data_path, 'test')
-    viz_files = get_tfrecords(data_path, 'viz')
 
-    print('data_path, ', data_path)
-    print('\n'.join(train_files))
-    print('\n'.join(eval_files))
-    print('\n'.join(viz_files))
 
     ## training params setup
     print('=========================================================')
@@ -275,8 +290,10 @@ if __name__ == '__main__':
     parser.add_argument(
             '--data_path',
             type=str,
-            default='/home/team19/datasets/mit/tfrecords',
-        #     default='/data03/team01/mit/tfrecords',
+            default='/home/team19/datasets/pixelshift/tfrecords',
+            # default='/data03/team01/pixelshift/tfrecords',
+            # default='/home/team19/datasets/mit/tfrecords',
+            # default='/data03/team01/mit/tfrecords',
             help='add noise on dec input')
 
     parser.add_argument(
