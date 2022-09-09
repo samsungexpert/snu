@@ -48,7 +48,7 @@ def init_variables():
 
 def main(args):
 
-    input_type = 'rgb'
+    input_type = 'raw_1ch' # bayer input
 
     # update params. using input arguments
     input_type = args.input_type
@@ -64,10 +64,7 @@ def main(args):
 
 
 
-    # loss_type = ['rgb', 'yuv', 'ploss'] # 'rgb', 'yuv', 'ploss'
     loss_type = ['rgb', 'yuv', 'ssim']  # 'rgb', 'yuv', 'ploss
-    # loss_type = ['rgb']  # 'rgb', 'yuv', 'ploss
-    # loss_type = ['yuv']
 
     # get util class
     if args.test:
@@ -76,7 +73,7 @@ def main(args):
         cache_enable=True
 
     utils = bwutils(input_type,
-                    cfa_pattern='tetra',
+                    cfa_pattern='bayer',
                     patch_size=patch_size,
                     crop_size=patch_size,
                     input_max=input_max,
@@ -95,14 +92,14 @@ def main(args):
 
     ## dataset
     if args.test:
-        data_path = 'datasets/pixelshift/tfrecords'
+        data_path = 'datasets/mit/tfrecords'
     def get_tfrecords(path, keyword):
         files = tf.io.gfile.glob(os.path.join(path, f'*{keyword}*tfrecords'))
         files.sort()
         return files
     train_files = get_tfrecords(data_path, 'train')
-    eval_files = get_tfrecords(data_path, 'valid')
-    viz_files = get_tfrecords(data_path, 'viz10')
+    eval_files = get_tfrecords(data_path, 'test')
+    viz_files = get_tfrecords(data_path, 'viz')
 
     print('data_path, ', data_path)
     print('\n'.join(train_files))
@@ -122,7 +119,7 @@ def main(args):
     batch_size      = batch_size * NGPU  # 128
     batch_size_eval = batch_size * NGPU
     batch_size_viz  = batch_size  # 128
-    batch_size_viz  = 10
+    batch_size_viz  = 8
     print(batch_size, batch_size_eval, batch_size_viz)
     # exit()
     train_params = {'filenames': train_files,
@@ -131,7 +128,7 @@ def main(args):
                     'shuffle_buff': 128,
                     'batch': batch_size,
                     'input_type':input_type,
-                    'train_type': 'unprocessing'
+                    'train_type': 'demosaic'
                     }
     eval_params = {'filenames': eval_files,
                    'mode': tf.estimator.ModeKeys.EVAL,
@@ -139,7 +136,7 @@ def main(args):
                    'shuffle_buff': 128,
                    'batch': batch_size_eval,
                    'input_type': input_type,
-                   'train_type': 'unprocessing'
+                   'train_type': 'demosaic'
                    }
 
     viz_params = {'filenames': viz_files,
@@ -148,7 +145,7 @@ def main(args):
                    'shuffle_buff': 128,
                    'batch': batch_size_viz,
                    'input_type': input_type,
-                   'train_type': 'unprocessing'
+                   'train_type': 'demosaic'
                    }
 
     dataset_train = utils.dataset_input_fn(train_params)
@@ -160,12 +157,11 @@ def main(args):
 
 
 
-    cnt_train, cnt_valid = 92800, 4800 # w/o noise
-    cnt_train, cnt_valid = 96200, 4800 # with noise
+    cnt_train, cnt_valid = 260000, 6000 # w/o noise
     if args.test:
         cnt_train, cnt_valid = 8, 8 # for test
 
-    cnt_viz = 10
+    cnt_viz = 8
 
 
     #########################
@@ -176,14 +172,14 @@ def main(args):
     # strategy = tf.distribute.MirroredStrategy()
     # with strategy.scope():
 
-        if input_type not in ['shrink', 'nonshrink', 'nonshrink_4ch', 'rgb']:
+        if input_type not in ['raw_1ch', 'rgb']:
             raise ValueError('unkown input_type, ', input_type)
 
         #####################
         ## Get model gogo
         #####################
 
-        bw = GenerationTF(model_name =  model_name, kernel_regularizer=True, kernel_constraint=True)
+        bw = GenerationTF(model_name =  model_name, kernel_regularizer=True, kernel_constraint=constraint_max)
 
         model = bw.model
         if False:
@@ -231,13 +227,13 @@ if __name__ == '__main__':
     parser.add_argument(
             '--input_type',
             type=str,
-            default='rgb',
+            default='raw_1ch',
             help='shrink / nonshrink / nonshrink_4ch. default:nonshrink_4ch')
 
     parser.add_argument(
             '--input_max',
             type=float,
-            default=65535,
+            default=255,
             help='input_max')
 
     parser.add_argument(
@@ -249,13 +245,13 @@ if __name__ == '__main__':
     parser.add_argument(
             '--batch_size',
             type=int,
-            default=32,
+            default=128,
             help='input patch size')
 
     parser.add_argument(
             '--epoch',
             type=int,
-            default=600,
+            default=500,
             help='epoch')
 
     parser.add_argument(
@@ -267,20 +263,20 @@ if __name__ == '__main__':
     parser.add_argument(
             '--model_name',
             type=str,
-            default='unetv2',
+            default='demosaic',
             help='resnet_flat, resnet_ed, bwunet, unet, unetv2')
 
     parser.add_argument(
             '--model_sig',
             type=str,
-            default='_noise',
+            default='_mit',
             help='model postfix')
 
     parser.add_argument(
             '--data_path',
             type=str,
-            default='/home/team19/datasets/pixelshift/tfrecords',
-        #     default='/data03/team01/pixelshift/tfrecords',
+            default='/home/team19/datasets/mit/tfrecords',
+        #     default='/data03/team01/mit/tfrecords',
             help='add noise on dec input')
 
     parser.add_argument(

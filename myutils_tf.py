@@ -85,7 +85,9 @@ class bwutils():
                              'input type must be either "shrink" / "nonshrink" / "nonshrink_4ch" / "raw_1ch"  but', input_type)
 
         cfa_pattern = cfa_pattern.lower()
-        if cfa_pattern in ['tetra', 2]:
+        if cfa_pattern in ['bayer', 1]:
+            cfa_pattern = 1
+        elif cfa_pattern in ['tetra', 2]:
             cfa_pattern = 2
         elif cfa_pattern in ['nona', 3]:
             cfa_pattern = 3
@@ -155,14 +157,7 @@ class bwutils():
                   (crop_size // 2 // cfa_pattern, crop_size // 2 // cfa_pattern))
 
 
-        if input_type in ['shrink_upscale']:
-            print('before', self.idx_R.shape, self.idx_G1.shape, self.idx_G2.shape, self.idx_B.shape)
-            self.idx_R = self.idx_R[:80, :80]
-            self.idx_G1 = self.idx_G1[:80, :80]
-            self.idx_G2 = self.idx_G2[:80, :80]
-            self.idx_B = self.idx_B[:80, :80]
-            self.idx_G = self.idx_G[:80, :80]
-            print('after', self.idx_R.shape, self.idx_G1.shape, self.idx_G2.shape, self.idx_B.shape)
+
 
 
         self.idx_RGB = np.concatenate((self.idx_R[..., np.newaxis],
@@ -338,14 +333,8 @@ class bwutils():
             image = tf.image.random_crop(image, [self.crop_size, self.crop_size, dim])
 
         if input_type in ['shrink']:
+
             patternized = self.get_patternized_4ch_image(image, is_shrink=True)
-
-        elif input_type in ['shrink_upscale']:
-
-            # todo: doenscale operation should be included
-            crop_size_resized = int(self.crop_size // self.upscaling_factor)
-            image_resized = self.resize_to_scale_factor(image, crop_size_resized)
-            patternized = self.get_patternized_4ch_image(image_resized, is_shrink=True)
 
         elif input_type in ['nonshrink_4ch']:
 
@@ -362,7 +351,7 @@ class bwutils():
         else:
             ValueError('unknown input type', input_type)
 
-        return patternized, image
+        return patternized
 
 
     # scale_by_input_max
@@ -419,23 +408,42 @@ class bwutils():
         # noise addition
         image = self.add_noise_batch(image)
 
-
         if self.input_bias:
              image       = (image       * 2) - 1
              image_gamma = (image_gamma * 2) - 1
 
         return image_gamma, image
 
+    def parse_tfrecord_demosaic(self, example, mode):
+        image = self.get_image_from_single_example(example, key='image', num_channels=3, dtype='uint8')
+        if mode == tf.estimator.ModeKeys.TRAIN:
+            image = self.data_augmentation(image)
 
+        image = self.scale_by_input_max(image)
+        image = tf.clip_by_value(image, 0, 1)
+
+        if self.input_bias:
+             image       = (image       * 2) - 1
+
+        patternized = self.get_patternized(image, self.input_type)
+
+        print('====================== patternized.shape ', patternized.shape)
+        print('====================== image.shape ', image.shape)
+
+        return patternized, image
 
 
     def dataset_input_fn(self, params):
         dataset = tf.data.TFRecordDataset(params['filenames'])
 
+        if params['train_type'] == 'unprocessing':
+            parse_fn = self.parse_tfrecord
+        elif params['train_type'] == 'demosaic':
+            parse_fn = self.parse_tfrecord_demosaic
 
-        dataset = dataset.map(partial(self.parse_tfrecord, mode=params['mode']), num_parallel_calls=tf.data.experimental.AUTOTUNE)
+        dataset = dataset.map(partial(parse_fn, mode=params['mode']), num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
-        # Dataset cache need 120 Main memory
+        # Dataset cache need 120G Main memory
         if self.cache_enable is True:
             dataset = dataset.cache()
 
@@ -550,13 +558,40 @@ class BwCkptCallback(Callback):
 
 
 class TensorBoardImage(Callback):
-    def __init__(self, log_dir, dataloader, patch_size, cnt_viz, input_bias):
+    def __init__(self, log_dir, dataloader, patch_size, cnt_viz, input_bias, cfa_pattern=1):
         super().__init__()
         self.log_dir = log_dir
         self.dataloader = dataloader
         self.patch_size = patch_size
         self.cnt_viz = cnt_viz
         self.input_bias = input_bias
+
+
+
+        self.idx_R = np.tile(
+                np.concatenate((np.concatenate((np.zeros((cfa_pattern, cfa_pattern)), np.ones((cfa_pattern, cfa_pattern))), axis=1),
+                                np.concatenate((np.zeros((cfa_pattern, cfa_pattern)), np.zeros((cfa_pattern, cfa_pattern))), axis=1)), axis=0),
+                  (patch_size // 2 // cfa_pattern, patch_size // 2 // cfa_pattern))
+
+        self.idx_G1 = np.tile(
+                np.concatenate((np.concatenate((np.ones((cfa_pattern, cfa_pattern)), np.zeros((cfa_pattern, cfa_pattern))), axis=1),
+                                np.concatenate((np.zeros((cfa_pattern, cfa_pattern)), np.zeros((cfa_pattern, cfa_pattern))), axis=1)), axis=0),
+                  (patch_size // 2 // cfa_pattern, patch_size // 2 // cfa_pattern))
+
+        self.idx_G2 = np.tile(
+                np.concatenate((np.concatenate((np.zeros((cfa_pattern, cfa_pattern)), np.zeros((cfa_pattern, cfa_pattern))), axis=1),
+                                np.concatenate((np.zeros((cfa_pattern, cfa_pattern)), np.ones((cfa_pattern, cfa_pattern))), axis=1)), axis=0),
+                  (patch_size // 2 // cfa_pattern, patch_size // 2 // cfa_pattern))
+
+        self.idx_B = np.tile(
+                np.concatenate((np.concatenate((np.zeros((cfa_pattern, cfa_pattern)), np.zeros((cfa_pattern, cfa_pattern))), axis=1),
+                                np.concatenate((np.ones((cfa_pattern, cfa_pattern)), np.zeros((cfa_pattern, cfa_pattern))), axis=1)), axis=0),
+                  (patch_size // 2 // cfa_pattern, patch_size // 2 // cfa_pattern))
+
+        self.idx_G = np.tile(
+                np.concatenate((np.concatenate((np.ones((cfa_pattern, cfa_pattern)), np.zeros((cfa_pattern, cfa_pattern))), axis=1),
+                                np.concatenate((np.zeros((cfa_pattern, cfa_pattern)), np.ones((cfa_pattern, cfa_pattern))), axis=1)), axis=0),
+                  (patch_size // 2 // cfa_pattern, patch_size // 2 // cfa_pattern))
 
     def set_model(self, model):
         self.model = model
@@ -579,6 +614,25 @@ class TensorBoardImage(Callback):
                 y    = (   y + 1) / 2
                 pred = (pred + 1) / 2
                 diff /= 2
+
+            if x.shape[-1] == 1:
+                tf_R  = tf.constant(self.idx_R,  dtype=np.float32)
+                tf_G  = tf.constant(self.idx_G1, dtype=np.float32)
+                tf_B  = tf.constant(self.idx_B,  dtype=np.float32)
+
+
+                R = tf.math.multiply(x[...,0], tf_R)
+                G = tf.math.multiply(x[...,0], tf_G)
+                B = tf.math.multiply(x[...,0], tf_B)
+
+
+                x = tf.concat((tf.expand_dims(R, axis=-1),
+                               tf.expand_dims(G, axis=-1),
+                               tf.expand_dims(B, axis=-1)),
+                                axis=-1)
+
+
+
 
             all_images = tf.concat( [tf.concat([x, y]      , axis=2),
                                      tf.concat([diff, pred], axis=2)] , axis=1)
@@ -607,9 +661,9 @@ def get_training_callbacks(names, base_path, model_name=None, dataloader=None, p
         callback_ckpt = tf.keras.callbacks.ModelCheckpoint(
                                 filepath = ckeckpoint_dir,
                                 monitor='val_loss',
-                                verbose=1,                                
+                                verbose=1,
                                 save_best_only=True,
-                                save_weights_only=False,                                
+                                save_weights_only=False,
                                 initial_value_threshold=initial_value_threshold )
         callbacks.append(callback_ckpt)
     if 'tensorboard' in names:

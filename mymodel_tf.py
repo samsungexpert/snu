@@ -34,7 +34,7 @@ class GenerationTF():
                  ch=(16, 32, 64, 128),
                  use_bn=True,
                  kernel_regularizer=None,
-                 kernel_constraint=None,
+                 kernel_constraint=6,
                  ):
 
 
@@ -50,7 +50,7 @@ class GenerationTF():
         self.kernel_constraint = None
         if kernel_constraint != None:
             self.kernel_constraint = tf.keras.constraints.MinMaxNorm(
-                    min_value=0.0, max_value=kernel_constraint, rate=1.0, axis=[0, 1, 2] )
+                    min_value=0.0, max_value=kernel_constraint, rate=1, axis=[0, 1, 2] )
             self.bias_constraint = tf.keras.constraints.MinMaxNorm(
                     min_value=0.0, max_value=kernel_constraint, rate=1, axis=0)
 
@@ -64,6 +64,8 @@ class GenerationTF():
             self.model = self.resnet_ed(self.input_shape)
         elif model_name == 'resnet_flat':
             self.model = self.resnet_flat(self.input_shape)
+        elif model_name == 'demosaic':
+            self.model = self.demosaic_hansol(self.input_shape)
         else:
             print('====================== unknown model name, ', model_name)
             exit()
@@ -391,7 +393,25 @@ class GenerationTF():
         model = tf.keras.models.Model(input, out, name=f'resnet_ed_{num_residual_blocks}')
         return model
 
+    def demosaic_hansol(self, input_shape=(128, 128, 1), cell_size:int=2, name='demosaic'):
+        input_shape=(128, 128, 1)
+        input = tf.keras.layers.Input(shape=input_shape, name='demosaic') # 128 x 128 x 1
 
+        s2d = tf.nn.space_to_depth(input, cell_size, name='space2depth') # 64 x 64 x 4
+
+        x_1 = self.conv2d(filters=12, kernel_size=3, activation='relu', name='conv1')(s2d) # 64 x 64 x 12
+        x_2 = self.conv2d(filters=12, kernel_size=3, activation='relu', name='conv2')(x_1) # 64 x 64 x 12
+        x_3 = self.conv2d(filters=12, kernel_size=3, activation='relu', name='conv3')(x_2) # 64 x 64 x 12
+        x_4 = self.conv2d(filters=12, kernel_size=3, activation='relu', name='conv4')(x_3) # 64 x 64 x 12
+        x_5 = self.conv2d(filters=12, kernel_size=3, activation='relu', name='conv5')(x_4) # 64 x 64 x 12
+
+        x_6 = x_5 + x_1  # 64 x 64 x 12
+
+        y = tf.nn.depth_to_space(x_6, cell_size, name='depth2space')  # 128 x 128 x 3
+
+        model = tf.keras.models.Model(input, y, name=name)
+
+        return model
 
 
 
@@ -403,11 +423,12 @@ def main():
 
 
     model_name = []
-    model_name.append('unetv2')
-    model_name.append('bwunet')
-    model_name.append('unet')
-    model_name.append('resnet_ed')
-    model_name.append('resnet_flat')
+    # model_name.append('unetv2')
+    # model_name.append('bwunet')
+    # model_name.append('unet')
+    # model_name.append('resnet_ed')
+    # model_name.append('resnet_flat')
+    model_name.append('demosaic')
     for mn in model_name:
         print('model_name = ', mn)
         bw = GenerationTF(model_name= mn, kernel_regularizer=True, kernel_constraint=True)
