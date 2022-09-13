@@ -16,6 +16,8 @@ model*
 *.h5
 *.npy
 *.bak
+*.png
+*.jpg
 
 .DS_Store
 # C extensions
