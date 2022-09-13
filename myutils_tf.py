@@ -1,6 +1,7 @@
 
 
 import os
+import random
 import glob
 import tensorflow as tf
 import numpy as np
@@ -315,6 +316,29 @@ class bwutils():
 
         return pattenrized
 
+    def get_patternized_1ch_to_3ch_image(self, image):
+
+        dtype = tf.float32
+
+
+        tf_R  = tf.constant(self.idx_R,  dtype=dtype)
+        tf_G = tf.constant(self.idx_G, dtype=dtype)
+        tf_B  = tf.constant(self.idx_B,  dtype=dtype)
+
+
+        # non_shrink
+        R  = tf.math.multiply(image, tf_R)
+        G  = tf.math.multiply(image, tf_G)
+        B  = tf.math.multiply(image, tf_B)
+
+
+
+        pattenrized = tf.concat((tf.expand_dims(R, axis=-1),
+                                 tf.expand_dims(G, axis=-1),
+                                 tf.expand_dims(B, axis=-1)),
+                                axis=-1)
+
+        return pattenrized
 
     def resize_to_scale_factor(self, image, crop_size_resized):
         # print('crop_size_resized', crop_size_resized)
@@ -438,6 +462,60 @@ class bwutils():
         return patternized, image
 
 
+    def data_augmentation_cycle(self, srgb, raw):
+
+        # flip
+        if random.random() > 0.5:
+            srgb = tf.image.flip_left_right(srgb)
+            raw  = tf.image.flip_left_right(raw)
+
+        if random.random() > 0.5:
+            srgb = tf.image.flip_up_down (srgb)
+            raw  = tf.image.flip_up_down (raw)
+
+        # rotation
+        r = np.random.randint(4)
+        srgb = tf.image.rot90(srgb, r)
+        raw  = tf.image.rot90(raw, r)
+
+        return srgb, raw
+
+
+    def parse_tfrecord_cycle(self, example, mode):
+
+        patch_size = self.patch_size
+
+        ## get single image
+        feature = {
+            'raw':  tf.io.FixedLenFeature([], tf.string),
+            'srgb': tf.io.FixedLenFeature([], tf.string)
+        }
+
+        parsed = tf.io.parse_single_example(example, feature)
+
+
+        srgb = tf.io.decode_raw(parsed['srgb'], 'uint8')
+        raw  = tf.io.decode_raw(parsed['raw'], 'uint16')
+
+        # reshape
+        srgb = tf.reshape(srgb, (patch_size, patch_size, 3))
+        raw  = tf.reshape(raw,  (patch_size, patch_size, 1))
+
+        # cast & normalize
+        srgb = tf.cast(srgb, tf.float32) / (2**8 - 1)
+        raw  = tf.cast(raw,  tf.float32) / (2**16 -1)
+
+
+        # augmentation
+        srgb, raw = self.data_augmentation_cycle(srgb, raw)
+
+
+        if self.input_bias:
+             srgb = (srgb * 2) - 1
+             raw  = (raw  * 2) - 1
+
+        return srgb, raw
+
     def dataset_input_fn(self, params):
         dataset = tf.data.TFRecordDataset(params['filenames'])
 
@@ -463,6 +541,27 @@ class bwutils():
 
         return dataset
 
+    def dataset_input_fn_cycle(self, params):
+        dataset = tf.data.TFRecordDataset(params['filenames'])
+
+        dataset = dataset.map(partial(self.parse_tfrecord_cycle,
+                                       mode=params['mode']),
+                                       num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
+        # Dataset cache need 120G Main memory
+        if self.cache_enable is True:
+            dataset = dataset.cache()
+
+        if params['mode'] == tf.estimator.ModeKeys.TRAIN:
+            dataset = dataset.shuffle(params['shuffle_buff']).repeat()
+
+        dataset = dataset.batch(params['batch'])
+
+        # dataset = dataset.map(self.add_noise_batch)
+        dataset = dataset.prefetch(buffer_size=tf.data.experimental.AUTOTUNE)
+        # dataset = dataset.prefetch(8 * params['batch'])
+
+        return dataset
 
     def loss_fn(self, y_true, y_pred):
 
