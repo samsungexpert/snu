@@ -499,15 +499,21 @@ class bwutils():
 
         # reshape
         srgb = tf.reshape(srgb, (patch_size, patch_size, 3))
-        raw  = tf.reshape(raw,  (patch_size, patch_size, 1))
+        raw  = tf.reshape(raw,  (patch_size, patch_size))
 
         # cast & normalize
         srgb = tf.cast(srgb, tf.float32) / (2**8 - 1)
         raw  = tf.cast(raw,  tf.float32) / (2**16 -1)
 
+        # raw 1ch to 3ch
+        print('>>>>>>> raw.shape', raw.shape)
+        raw = self.get_patternized_1ch_to_3ch_image(raw)
+        print('<<<<<<< raw.shape', raw.shape)
+
 
         # augmentation
-        srgb, raw = self.data_augmentation_cycle(srgb, raw)
+        if mode == tf.estimator.ModeKeys.TRAIN:
+            srgb, raw = self.data_augmentation_cycle(srgb, raw)
 
 
         if self.input_bias:
@@ -629,6 +635,15 @@ class bwutils():
         ssim_loss = 1. - tf.image.ssim(y_true, y_pred, 1)
         return ssim_loss
 
+    def loss_fn_bayer(self, y_true, y_pred):
+
+        y_true = self.get_patternized_1ch_raw_image(y_true)
+        y_pred = self.get_patternized_1ch_raw_image(y_pred)
+
+        bayer_loss = tf.keras.backend.mean(tf.keras.backend.abs(y_true - y_pred))
+
+
+        return bayer_loss
 
 def get_checkpoint_manager(model, optimizer, directory, name):
     checkpoint = tf.train.Checkpoint(model=model,
@@ -736,7 +751,10 @@ class TensorBoardImage(Callback):
                                 axis=-1)
 
 
-
+            print('x.shape', x.shape)
+            print('y.shape', y.shape)
+            print('y.shape', y.shape)
+            print('y.shape', y.shape)
 
             all_images = tf.concat( [tf.concat([x, y]      , axis=2),
                                      tf.concat([diff, pred], axis=2)] , axis=1)

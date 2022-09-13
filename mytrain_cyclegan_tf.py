@@ -212,7 +212,7 @@ The discriminators implement the following architecture:
 """
 def get_discriminator(
     filters=64,
-    input_img_size=(128,128,1),
+    input_img_size=(128,128,3),
     kernel_initializer=kernel_init, num_downsampling=3, name=None
 ):
     img_input = tf.keras.layers.Input(shape=input_img_size, name=name + "_img_input")
@@ -286,6 +286,7 @@ class CycleGan(tf.keras.Model):
         disc_Y_optimizer,
         gen_loss_fn,
         disc_loss_fn,
+        bayer_loss_fn,
     ):
         super(CycleGan, self).compile()
         self.gen_G_optimizer = gen_G_optimizer
@@ -296,13 +297,40 @@ class CycleGan(tf.keras.Model):
         self.discriminator_loss_fn = disc_loss_fn
         # self.cycle_loss_fn = tf.keras.losses.MeanAbsoluteError(reduction=tf.keras.losses.Reduction.SUM)
         # self.identity_loss_fn = tf.keras.losses.MeanAbsoluteError(reduction=tf.keras.losses.Reduction.SUM)
-        self.cycle_loss_fn    = tf.keras.losses.MeanAbsoluteError( )
-        self.identity_loss_fn = tf.keras.losses.MeanAbsoluteError( )
+        # self.cycle_loss_fn    = tf.keras.losses.MeanAbsoluteError( )
+        # self.identity_loss_fn = tf.keras.losses.MeanAbsoluteError( )
+
+        self.cycle_loss_fn    = bayer_loss_fn
+        self.identity_loss_fn = bayer_loss_fn
+
+        self.bayer_loss_fn = bayer_loss_fn
+
+    def save_models(self, base_path:str, name:str, include_optimizer:bool=False):
+        name_G = os.path.join(base_path, 'G_'+name)
+        name_F = os.path.join(base_path, 'F_'+name)
+        name_X = os.path.join(base_path, 'X_'+name)
+        name_Y = os.path.join(base_path, 'Y_'+name)
+
+
+
+        self.gen_G.save(name_G,  include_optimizer=include_optimizer)
+        self.gen_F.save(name_F,  include_optimizer=include_optimizer)
+        self.disc_X.save(name_X, include_optimizer=include_optimizer)
+        self.disc_Y.save(name_Y, include_optimizer=include_optimizer)
+
+
 
 
     def train_step(self, batch_data):
         # x is Horse and y is zebra
         real_x, real_y = batch_data
+
+        print('--------------------------')
+        print('--------------------------')
+        print('real_x.shape ', real_x.shape)
+        print('real_y.shape ', real_y.shape)
+        print('--------------------------')
+        print('--------------------------')
 
         # For CycleGAN, we need to calculate different
         # kinds of losses for the generators and discriminators.
@@ -321,9 +349,9 @@ class CycleGan(tf.keras.Model):
 
         with tf.GradientTape(persistent=True) as tape:
             # Horse to fake zebra
-            fake_y = self.gen_G(real_x, training=True)
+            fake_y = self.gen_G(real_x, training=True) # sRGB -> RAW
             # Zebra to fake horse -> y2x
-            fake_x = self.gen_F(real_y, training=True)
+            fake_x = self.gen_F(real_y, training=True) # RAW -> sRGB
 
             # Cycle (Horse to fake zebra to fake horse): x -> y -> x
             cycled_x = self.gen_F(fake_y, training=True)
@@ -402,6 +430,132 @@ class CycleGan(tf.keras.Model):
 
 ###########################################################################
 
+class TensorBoardImageCycle(Callback):
+    def __init__(self, log_dir, dataloader, patch_size, cnt_viz, input_bias, cfa_pattern=1):
+        super().__init__()
+        self.log_dir = log_dir
+        self.dataloader = dataloader
+        self.patch_size = patch_size
+        self.cnt_viz = cnt_viz
+        self.input_bias = input_bias
+
+
+
+        self.idx_R = np.tile(
+                np.concatenate((np.concatenate((np.zeros((cfa_pattern, cfa_pattern)), np.ones((cfa_pattern, cfa_pattern))), axis=1),
+                                np.concatenate((np.zeros((cfa_pattern, cfa_pattern)), np.zeros((cfa_pattern, cfa_pattern))), axis=1)), axis=0),
+                  (patch_size // 2 // cfa_pattern, patch_size // 2 // cfa_pattern))
+
+        self.idx_G1 = np.tile(
+                np.concatenate((np.concatenate((np.ones((cfa_pattern, cfa_pattern)), np.zeros((cfa_pattern, cfa_pattern))), axis=1),
+                                np.concatenate((np.zeros((cfa_pattern, cfa_pattern)), np.zeros((cfa_pattern, cfa_pattern))), axis=1)), axis=0),
+                  (patch_size // 2 // cfa_pattern, patch_size // 2 // cfa_pattern))
+
+        self.idx_G2 = np.tile(
+                np.concatenate((np.concatenate((np.zeros((cfa_pattern, cfa_pattern)), np.zeros((cfa_pattern, cfa_pattern))), axis=1),
+                                np.concatenate((np.zeros((cfa_pattern, cfa_pattern)), np.ones((cfa_pattern, cfa_pattern))), axis=1)), axis=0),
+                  (patch_size // 2 // cfa_pattern, patch_size // 2 // cfa_pattern))
+
+        self.idx_B = np.tile(
+                np.concatenate((np.concatenate((np.zeros((cfa_pattern, cfa_pattern)), np.zeros((cfa_pattern, cfa_pattern))), axis=1),
+                                np.concatenate((np.ones((cfa_pattern, cfa_pattern)), np.zeros((cfa_pattern, cfa_pattern))), axis=1)), axis=0),
+                  (patch_size // 2 // cfa_pattern, patch_size // 2 // cfa_pattern))
+
+        self.idx_G = np.tile(
+                np.concatenate((np.concatenate((np.ones((cfa_pattern, cfa_pattern)), np.zeros((cfa_pattern, cfa_pattern))), axis=1),
+                                np.concatenate((np.zeros((cfa_pattern, cfa_pattern)), np.ones((cfa_pattern, cfa_pattern))), axis=1)), axis=0),
+                  (patch_size // 2 // cfa_pattern, patch_size // 2 // cfa_pattern))
+
+    def set_model(self, model):
+        self.model = model
+        self.writer = tf.summary.create_file_writer(self.log_dir, filename_suffix='images')
+
+    def on_train_begin(self, _):
+        self.write_image(tag='Original Image', epoch=0)
+
+    def on_train_end(self, _):
+        self.writer.close()
+
+    def write_image(self, tag, epoch):
+        gidx = 0
+        for idx,  (x, y) in enumerate(self.dataloader):
+            # x: sRGB
+            # y: RAW (1ch to 3ch, nonshrink)
+            y_fake = self.model.gen_G(x)
+            x_fake = self.model.gen_F(y)
+
+            if self.input_bias:
+                x    = (   x + 1) / 2
+                y    = (   y + 1) / 2
+                y_fake = (y_fake + 1) / 2
+                x_fake = (x_fake + 1) / 2
+
+
+
+
+            # print('x.shape', x.shape)
+            # print('y.shape', y.shape)
+            # print('y_fake.shape', y_fake.shape)
+            # print('x_fake.shape', x_fake.shape)
+
+            print('x: %.2f, %.2f' %( tf.reduce_min(x).numpy(), tf.reduce_max(x).numpy()), end='')
+            print(', y: %.2f, %.2f' %( tf.reduce_min(y).numpy(), tf.reduce_max(y).numpy()), end='')
+            print(', x_fake: %.2f, %.2f' % (  tf.reduce_min(x_fake).numpy(), tf.reduce_max(x_fake).numpy()), end='')
+            print(', y_fake: %.2f, %.2f' % ( tf.reduce_min(y_fake).numpy(), tf.reduce_max(y_fake).numpy()))
+
+            all_images = tf.concat( [tf.concat([x, y]      , axis=2),
+                                     tf.concat([x_fake, y_fake], axis=2)] , axis=1)
+
+
+            with self.writer.as_default():
+                tf.summary.image(f"Viz set {gidx}", all_images, max_outputs=16, step=epoch)
+            gidx+=1
+
+        self.writer.flush()
+
+    def on_epoch_end(self, epoch, logs={}):
+        self.write_image('Images', epoch)
+
+
+
+
+class SaveModelH5(tf.keras.callbacks.Callback):
+
+    def __init__(self, path, name):
+        super().__init__()
+        self.path = path
+        self.name = name
+
+    def on_train_begin(self, logs=None):
+         self.val_loss = []
+
+
+    def on_epoch_end(self, epoch, logs=None):
+        current_val_loss = logs.get("val_loss")
+        self.val_loss.append(logs.get("val_loss"))
+        if current_val_loss <= min(self.val_loss):
+            print('Find lowest val_loss. Saving entire model.')
+            path = os.path.join(self.path, '{epoch:05d}_%s_{loss:.5e}.h5' % (self.name))
+
+            self.model.save_models(path + '.h5', include_optimizer=True)
+            self.model.save(path, save_format='tf') # < ----- Here
+
+
+
+###########################################################################
+adv_loss_fn = tf.keras.losses.MeanSquaredError()
+def generator_loss_fn(fake):
+    fake_loss = adv_loss_fn(tf.ones_like(fake), fake)
+    return fake_loss
+
+
+# Define the loss function for the discriminators
+def discriminator_loss_fn(real, fake):
+    real_loss = adv_loss_fn(tf.ones_like(real), real)
+    fake_loss = adv_loss_fn(tf.zeros_like(fake), fake)
+    return (real_loss + fake_loss) * 0.5
+###########################################################################
+
 
 
 def main(args):
@@ -419,7 +573,6 @@ def main(args):
     data_path = args.data_path
     model_sig = args.model_sig
     myepoch = args.epoch
-
 
 
     # loss_type = ['rgb', 'yuv', 'ploss'] # 'rgb', 'yuv', 'ploss'
@@ -442,6 +595,41 @@ def main(args):
                     loss_mode='2norm',
                     loss_scale=1e4,
                     cache_enable=cache_enable)
+
+
+    ########################################
+    # Get the generators
+    gen_G = get_resnet_generator(name="generator_G",
+                                 input_img_size=(patch_size,patch_size,3),
+                                 output_channels=3) # sRGB to RAW
+
+    gen_F = get_resnet_generator(name="generator_F",
+                                 input_img_size=(patch_size,patch_size,3),
+                                 output_channels=3) # RAW to sRGB
+
+    # Get the discriminators
+    disc_Y = get_discriminator(name="discriminator_Y")  # disc for G : RAW
+    disc_X = get_discriminator(name="discriminator_X")  # disc for F : sRGB
+
+    # Create cycle gan model
+    cycle_gan_model = CycleGan(
+        generator_G=gen_G, generator_F=gen_F, discriminator_X=disc_X, discriminator_Y=disc_Y
+    )
+
+
+    # Compile the model
+    cycle_gan_model.compile(
+        gen_G_optimizer=tf.keras.optimizers.Adam(learning_rate=2e-4, beta_1=0.5),
+        gen_F_optimizer=tf.keras.optimizers.Adam(learning_rate=2e-4, beta_1=0.5),
+        disc_X_optimizer=tf.keras.optimizers.Adam(learning_rate=2e-4, beta_1=0.5),
+        disc_Y_optimizer=tf.keras.optimizers.Adam(learning_rate=2e-4, beta_1=0.5),
+        gen_loss_fn=generator_loss_fn,
+        disc_loss_fn=discriminator_loss_fn,
+        bayer_loss_fn=utils.loss_fn_bayer
+    )
+    ########################################
+    print('model created done done')
+
 
 
 
@@ -518,8 +706,8 @@ def main(args):
     # print('train set len : ', tf.data.experimental.cardinality(dataset_train))
     # print('train set len : ', dataset_train.element_spec)
 
-    print(len(list(dataset_train)), len(list(dataset_eval)), len(list(dataset_viz)))
-    exit()
+    # print(len(list(dataset_train)), len(list(dataset_eval)), len(list(dataset_viz)))
+    # exit()
 
     cnt_train, cnt_valid = 92800, 4800 # w/o noise
     cnt_train, cnt_valid = 96200, 4800 # with noise
@@ -544,42 +732,59 @@ def main(args):
         ## Get model gogo
         #####################
 
-        bw = GenerationTF(model_name =  model_name, kernel_regularizer=True, kernel_constraint=True)
+        # bw = GenerationTF(model_name =  model_name, kernel_regularizer=True, kernel_constraint=True)
 
-        model = bw.model
+        model = cycle_gan_model
         if False:
             model.input.set_shape(1 + model.input.shape[1:]) # to freeze model
-        model.save(os.path.join(base_path, 'checkpoint' , f'{model_name}_model_structure.h5'), include_optimizer=False)
-        model.summary()
+        # model.save(os.path.join(base_path, 'checkpoint' , f'{model_name}_model_structure.h5'), include_optimizer=False)
+        model.save_models(os.path.join(base_path, 'checkpoint' ), f'{model_name}_model_structure.h5', include_optimizer=False)
+        # model.summaries()
 
-        optimizer = tf.keras.optimizers.Adam(learning_rate=LEARNING_RATE, name='Adam')
-        model.compile(optimizer=optimizer,  # 'adam',
-                    loss=utils.loss_fn,  # 'mse',
-                    metrics=[utils.loss_fn])
+
+
+        # optimizer = tf.keras.optimizers.Adam(learning_rate=LEARNING_RATE, name='Adam')
+        # model.compile(optimizer=optimizer,  # 'adam',
+        #             loss=utils.loss_fn,  # 'mse',
+        #             metrics=[utils.loss_fn])
+
 
 
         ## load pre-trained model
-        trained_model_file_name = '00003_resnet_flat_2.89940e-09.h5'
-        model, prev_epoch, prev_loss = load_checkpoint_if_exists(model, model_dir, model_name, trained_model_file_name)
+        # trained_model_file_name = '00003_resnet_flat_2.89940e-09.h5'
+        # model, prev_epoch, prev_loss = load_checkpoint_if_exists(model, model_dir, model_name, trained_model_file_name)
 
 
 
         ## callbacks for training loop
-        callbacks = get_training_callbacks(['ckeckpoint', 'tensorboard', 'image'],
+        tb_dir = os.path.join(base_path, 'board', model_name + model_sig, 'image') #, model_name)
+        os.makedirs(tb_dir, exist_ok=True)
+        callback_images =TensorBoardImageCycle( log_dir=tb_dir,
+                                                dataloader = dataset_viz,
+                                                patch_size = patch_size,
+                                                cnt_viz = cnt_viz,
+                                                input_bias=True)
+
+        ckpt_dir = os.path.join(base_path, 'ckeckpoint')
+        callback_ckpt = SaveModelH5(path=ckpt_dir, name=model_name + model_sig)
+
+        callbacks = get_training_callbacks(['tensorboard'],
                                             base_path=base_path, model_name=model_name + model_sig,
-                                            dataloader=dataset_viz, cnt_viz=cnt_viz, initial_value_threshold=prev_loss)
+                                            dataloader=dataset_viz, cnt_viz=cnt_viz)
         ## lr callback
         callback_lr = get_scheduler(type='cosine', lr_init=LEARNING_RATE, steps=myepoch)
         callbacks.append(callback_lr)
+        callbacks.append(callback_images)
+        callbacks.append(callback_ckpt)
 
         # train gogo
         more_ckpt_ratio = 1
         model.fit(dataset_train,
                     epochs=myepoch*more_ckpt_ratio,
                     steps_per_epoch=(cnt_train // (batch_size*more_ckpt_ratio)) + 1,
-                    initial_epoch=prev_epoch,
+                    initial_epoch=0,
                     validation_data=dataset_eval,
-                    validation_steps=cnt_valid // batch_size_eval,
+                    # validation_steps=cnt_valid // batch_size_eval,
                     validation_freq=1,
                     callbacks=callbacks
                     )
@@ -628,13 +833,13 @@ if __name__ == '__main__':
     parser.add_argument(
             '--model_name',
             type=str,
-            default='unetv2',
+            default='cycle_gan',
             help='resnet_flat, resnet_ed, bwunet, unet, unetv2')
 
     parser.add_argument(
             '--model_sig',
             type=str,
-            default='_noise',
+            default='_bayer',
             help='model postfix')
 
     parser.add_argument(
