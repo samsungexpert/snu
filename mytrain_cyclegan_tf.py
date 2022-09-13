@@ -17,7 +17,7 @@ from mymodel_tf import save_as_tflite, GenerationTF
 from myutils_tf import *
 
 # os.environ["CUDA_VISIBLE_DEVICES"]='-1'
-os.environ["CUDA_VISIBLE_DEVICES"]='0'
+os.environ["CUDA_VISIBLE_DEVICES"]='6'
 # To use limit number of GPU
 # os.environ["CUDA_VISIBLE_DEVICES"] = "2,3"
 
@@ -531,14 +531,18 @@ class SaveModelH5(tf.keras.callbacks.Callback):
 
 
     def on_epoch_end(self, epoch, logs=None):
-        current_val_loss = logs.get("val_loss")
-        self.val_loss.append(logs.get("val_loss"))
+        # G_loss: 15.9404 - F_loss: 8.1391 - D_X_loss: 0.4872 - D_Y_loss:
+        G_loss = logs.get("G_loss")
+        F_loss = logs.get("F_loss")
+        current_val_loss = G_loss + F_loss
+        self.val_loss.append(current_val_loss)
         if current_val_loss <= min(self.val_loss):
             print('Find lowest val_loss. Saving entire model.')
             path = os.path.join(self.path, '{epoch:05d}_%s_{loss:.5e}.h5' % (self.name))
 
-            self.model.save_models(path + '.h5', include_optimizer=True)
-            self.model.save(path, save_format='tf') # < ----- Here
+            os.makedirs(self.path, exist_ok=True)
+            self.model.save_models(self.path,  '%05d_%s_%.5e.h5' % (epoch, self.name, current_val_loss), include_optimizer=True)
+            # self.model.save(path, save_format='tf') # < ----- Here
 
 
 
@@ -646,8 +650,8 @@ def main(args):
         files = tf.io.gfile.glob(os.path.join(path, f'*{keyword}*tfrecords'))
         files.sort()
         return files
-    train_files = get_tfrecords(data_path, 'viz')
-    eval_files = get_tfrecords(data_path, 'viz')
+    train_files = get_tfrecords(data_path, 'train')
+    eval_files = get_tfrecords(data_path, 'test')
     viz_files = get_tfrecords(data_path, 'viz')
 
     print('data_path, ', data_path)
@@ -670,7 +674,9 @@ def main(args):
     batch_size      = batch_size * NGPU  # 128
     batch_size_eval = batch_size * NGPU
     batch_size_viz  = batch_size  # 128
-    batch_size_viz  = batch_size
+    batch_size      = 1
+    batch_size_eval = 1
+    batch_size_viz  = 1
     print('batch_size: ', batch_size, batch_size_eval, batch_size_viz)
     # exit()
     train_params = {'filenames': train_files,
@@ -710,7 +716,7 @@ def main(args):
     # exit()
 
     cnt_train, cnt_valid = 92800, 4800 # w/o noise
-    cnt_train, cnt_valid = 96200, 4800 # with noise
+    cnt_train, cnt_valid = 127020*2, 32640 # with noise
     if args.test:
         cnt_train, cnt_valid = 8, 8 # for test
 
@@ -743,18 +749,6 @@ def main(args):
 
 
 
-        # optimizer = tf.keras.optimizers.Adam(learning_rate=LEARNING_RATE, name='Adam')
-        # model.compile(optimizer=optimizer,  # 'adam',
-        #             loss=utils.loss_fn,  # 'mse',
-        #             metrics=[utils.loss_fn])
-
-
-
-        ## load pre-trained model
-        # trained_model_file_name = '00003_resnet_flat_2.89940e-09.h5'
-        # model, prev_epoch, prev_loss = load_checkpoint_if_exists(model, model_dir, model_name, trained_model_file_name)
-
-
 
         ## callbacks for training loop
         tb_dir = os.path.join(base_path, 'board', model_name + model_sig, 'image') #, model_name)
@@ -762,10 +756,10 @@ def main(args):
         callback_images =TensorBoardImageCycle( log_dir=tb_dir,
                                                 dataloader = dataset_viz,
                                                 patch_size = patch_size,
-                                                cnt_viz = cnt_viz,
+                                                cnt_viz = 5,
                                                 input_bias=True)
 
-        ckpt_dir = os.path.join(base_path, 'ckeckpoint')
+        ckpt_dir = os.path.join(base_path, 'checkpoint', model_name + model_sig)
         callback_ckpt = SaveModelH5(path=ckpt_dir, name=model_name + model_sig)
 
         callbacks = get_training_callbacks(['tensorboard'],
@@ -778,7 +772,7 @@ def main(args):
         callbacks.append(callback_ckpt)
 
         # train gogo
-        more_ckpt_ratio = 1
+        more_ckpt_ratio = 1000
         model.fit(dataset_train,
                     epochs=myepoch*more_ckpt_ratio,
                     steps_per_epoch=(cnt_train // (batch_size*more_ckpt_ratio)) + 1,
@@ -815,7 +809,7 @@ if __name__ == '__main__':
     parser.add_argument(
             '--batch_size',
             type=int,
-            default=32,
+            default=1,
             help='input patch size')
 
     parser.add_argument(
