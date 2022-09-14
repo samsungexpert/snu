@@ -17,9 +17,9 @@ from mymodel_tf import save_as_tflite, GenerationTF
 from myutils_tf import *
 
 # os.environ["CUDA_VISIBLE_DEVICES"]='-1'
-os.environ["CUDA_VISIBLE_DEVICES"]='6'
+# os.environ["CUDA_VISIBLE_DEVICES"]='6'
 # To use limit number of GPU
-# os.environ["CUDA_VISIBLE_DEVICES"] = "2,3"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
 
 
 
@@ -295,7 +295,7 @@ class CycleGan(tf.keras.Model):
         self.disc_Y_optimizer = disc_Y_optimizer
         self.generator_loss_fn = gen_loss_fn
         self.discriminator_loss_fn = disc_loss_fn
-        # self.cycle_loss_fn = tf.keras.losses.MeanAbsoluteError(reduction=tf.keras.losses.Reduction.SUM)
+        # self.cycle_loss_fn    = tf.keras.losses.MeanAbsoluteError(reduction=tf.keras.losses.Reduction.SUM)
         # self.identity_loss_fn = tf.keras.losses.MeanAbsoluteError(reduction=tf.keras.losses.Reduction.SUM)
         # self.cycle_loss_fn    = tf.keras.losses.MeanAbsoluteError( )
         # self.identity_loss_fn = tf.keras.losses.MeanAbsoluteError( )
@@ -547,7 +547,13 @@ class SaveModelH5(tf.keras.callbacks.Callback):
 
 
 ###########################################################################
-adv_loss_fn = tf.keras.losses.MeanSquaredError()
+# adv_loss_fn = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)
+def adv_loss_fn(y_true, y_pred):
+        myloss = tf.keras.backend.mean(tf.keras.backend.abs(y_true - y_pred))
+        return myloss
+
+
+# adv_loss_fn = tf.keras.losses.MeanSquaredError()
 def generator_loss_fn(fake):
     fake_loss = adv_loss_fn(tf.ones_like(fake), fake)
     return fake_loss
@@ -601,38 +607,7 @@ def main(args):
                     cache_enable=cache_enable)
 
 
-    ########################################
-    # Get the generators
-    gen_G = get_resnet_generator(name="generator_G",
-                                 input_img_size=(patch_size,patch_size,3),
-                                 output_channels=3) # sRGB to RAW
 
-    gen_F = get_resnet_generator(name="generator_F",
-                                 input_img_size=(patch_size,patch_size,3),
-                                 output_channels=3) # RAW to sRGB
-
-    # Get the discriminators
-    disc_Y = get_discriminator(name="discriminator_Y")  # disc for G : RAW
-    disc_X = get_discriminator(name="discriminator_X")  # disc for F : sRGB
-
-    # Create cycle gan model
-    cycle_gan_model = CycleGan(
-        generator_G=gen_G, generator_F=gen_F, discriminator_X=disc_X, discriminator_Y=disc_Y
-    )
-
-
-    # Compile the model
-    cycle_gan_model.compile(
-        gen_G_optimizer=tf.keras.optimizers.Adam(learning_rate=2e-4, beta_1=0.5),
-        gen_F_optimizer=tf.keras.optimizers.Adam(learning_rate=2e-4, beta_1=0.5),
-        disc_X_optimizer=tf.keras.optimizers.Adam(learning_rate=2e-4, beta_1=0.5),
-        disc_Y_optimizer=tf.keras.optimizers.Adam(learning_rate=2e-4, beta_1=0.5),
-        gen_loss_fn=generator_loss_fn,
-        disc_loss_fn=discriminator_loss_fn,
-        bayer_loss_fn=utils.loss_fn_bayer
-    )
-    ########################################
-    print('model created done done')
 
 
 
@@ -674,8 +649,8 @@ def main(args):
     batch_size      = batch_size * NGPU  # 128
     batch_size_eval = batch_size * NGPU
     batch_size_viz  = batch_size  # 128
-    batch_size      = 16
-    batch_size_eval = 16
+    batch_size      = 32
+    batch_size_eval = 32
     batch_size_viz  = 5
     print('batch_size: ', batch_size, batch_size_eval, batch_size_viz)
     # exit()
@@ -726,10 +701,10 @@ def main(args):
     #########################
     ## training gogo
 
-    if True:
+    # if True:
 
-    # strategy = tf.distribute.MirroredStrategy()
-    # with strategy.scope():
+    strategy = tf.distribute.MirroredStrategy()
+    with strategy.scope():
 
         if input_type not in ['shrink', 'nonshrink', 'nonshrink_4ch', 'rgb']:
             raise ValueError('unkown input_type, ', input_type)
@@ -737,6 +712,41 @@ def main(args):
         #####################
         ## Get model gogo
         #####################
+
+        ########################################
+        # Get the generators
+        gen_G = get_resnet_generator(name="generator_G",
+                                    input_img_size=(patch_size,patch_size,3),
+                                    output_channels=3) # sRGB to RAW
+
+        gen_F = get_resnet_generator(name="generator_F",
+                                    input_img_size=(patch_size,patch_size,3),
+                                    output_channels=3) # RAW to sRGB
+
+        # Get the discriminators
+        disc_Y = get_discriminator(name="discriminator_Y")  # disc for G : RAW
+        disc_X = get_discriminator(name="discriminator_X")  # disc for F : sRGB
+
+        # Create cycle gan model
+        cycle_gan_model = CycleGan(
+            generator_G=gen_G, generator_F=gen_F, discriminator_X=disc_X, discriminator_Y=disc_Y
+        )
+
+
+        # Compile the model
+        cycle_gan_model.compile(
+            gen_G_optimizer=tf.keras.optimizers.Adam(learning_rate=2e-4, beta_1=0.5),
+            gen_F_optimizer=tf.keras.optimizers.Adam(learning_rate=2e-4, beta_1=0.5),
+            disc_X_optimizer=tf.keras.optimizers.Adam(learning_rate=2e-4, beta_1=0.5),
+            disc_Y_optimizer=tf.keras.optimizers.Adam(learning_rate=2e-4, beta_1=0.5),
+            gen_loss_fn=generator_loss_fn,
+            disc_loss_fn=discriminator_loss_fn,
+            bayer_loss_fn=utils.loss_fn_bayer
+        )
+        print('model created done done')
+        ########################################
+
+
 
         # bw = GenerationTF(model_name =  model_name, kernel_regularizer=True, kernel_constraint=True)
 
@@ -840,7 +850,7 @@ if __name__ == '__main__':
             '--data_path',
             type=str,
             default='/home/team19/datasets/sidd/tfrecords',
-        #     default='/data03/team01/pixelshift/tfrecords',
+            # default='/home/team01/datasets/sidd/tfrecords',
             help='add noise on dec input')
 
     parser.add_argument(
