@@ -650,8 +650,8 @@ def main(args):
         files = tf.io.gfile.glob(os.path.join(path, f'*{keyword}*tfrecords'))
         files.sort()
         return files
-    train_files = get_tfrecords(data_path, 'train')
-    eval_files = get_tfrecords(data_path, 'test')
+    train_files = get_tfrecords(data_path, 'train*S6_noisy')
+    eval_files = get_tfrecords(data_path, 'test*IP')
     viz_files = get_tfrecords(data_path, 'viz')
 
     print('data_path, ', data_path)
@@ -674,9 +674,9 @@ def main(args):
     batch_size      = batch_size * NGPU  # 128
     batch_size_eval = batch_size * NGPU
     batch_size_viz  = batch_size  # 128
-    batch_size      = 1
-    batch_size_eval = 1
-    batch_size_viz  = 1
+    batch_size      = 16
+    batch_size_eval = 16
+    batch_size_viz  = 5
     print('batch_size: ', batch_size, batch_size_eval, batch_size_viz)
     # exit()
     train_params = {'filenames': train_files,
@@ -716,7 +716,7 @@ def main(args):
     # exit()
 
     cnt_train, cnt_valid = 92800, 4800 # w/o noise
-    cnt_train, cnt_valid = 127020*2, 32640 # with noise
+    cnt_train, cnt_valid = 127020*2//2//6, 32640//6 # with noise
     if args.test:
         cnt_train, cnt_valid = 8, 8 # for test
 
@@ -772,13 +772,13 @@ def main(args):
         callbacks.append(callback_ckpt)
 
         # train gogo
-        more_ckpt_ratio = 1000
+        more_ckpt_ratio = 2
         model.fit(dataset_train,
                     epochs=myepoch*more_ckpt_ratio,
                     steps_per_epoch=(cnt_train // (batch_size*more_ckpt_ratio)) + 1,
                     initial_epoch=0,
                     validation_data=dataset_eval,
-                    # validation_steps=cnt_valid // batch_size_eval,
+                    validation_steps=cnt_valid // batch_size_eval,
                     validation_freq=1,
                     callbacks=callbacks
                     )
