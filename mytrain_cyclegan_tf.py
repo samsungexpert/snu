@@ -849,8 +849,8 @@ if __name__ == '__main__':
     parser.add_argument(
             '--data_path',
             type=str,
-            default='/home/team19/datasets/sidd/tfrecords',
-            # default='/home/team01/datasets/sidd/tfrecords',
+            # default='/home/team19/datasets/sidd/tfrecords',
+            default='/home/team01/datasets/sidd/tfrecords',
             help='add noise on dec input')
 
     parser.add_argument(
