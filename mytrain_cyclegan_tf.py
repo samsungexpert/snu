@@ -16,10 +16,10 @@ import tensorflow_addons as tfa
 from mymodel_tf import save_as_tflite, GenerationTF
 from myutils_tf import *
 
-os.environ["CUDA_VISIBLE_DEVICES"]='0'
+# os.environ["CUDA_VISIBLE_DEVICES"]='0'
 # os.environ["CUDA_VISIBLE_DEVICES"]='-1'
 # os.environ["CUDA_VISIBLE_DEVICES"]='6'
-# os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
 
 
 
@@ -684,23 +684,24 @@ def main(args):
     print('=========================================================')
     print('========================================================= NGPU', NGPU)
 
+
     # exit()
 
     if args.test:
         batch_size = 1
-    batch_size      = batch_size * NGPU  # 128
-    batch_size_eval = batch_size * NGPU
-    batch_size_viz  = batch_size  # 128
+    batch_size_train = batch_size * NGPU  # 128
+    batch_size_eval  = batch_size * NGPU
+    batch_size_viz   = batch_size  # 128
     # batch_size      = 32
     # batch_size_eval = 32
     batch_size_viz  = 5
-    print('batch_size: ', batch_size, batch_size_eval, batch_size_viz)
-    # exit()
+    print('batch_size: ', batch_size_train, batch_size_eval, batch_size_viz)
+    #exit()
     train_params = {'filenames': train_files,
                     'mode': tf.estimator.ModeKeys.TRAIN,
                     'threads': 2,
                     'shuffle_buff': 256,
-                    'batch': batch_size,
+                    'batch': batch_size_train,
                     'input_type':input_type,
                     'train_type': 'unprocessing'
                     }
@@ -791,11 +792,11 @@ def main(args):
         # load pre-trained model
         # model, prev_epoch, prev_loss = load_checkpoint_if_exists(model, model_dir, model_name, trained_model_file_name)
 
-        epoch = 9
+        prev_epoch = 0
         cycle_gan_model, prev_epoch, prev_loss = load_model_if_exists(cycle_gan_model,
                                                                       model_dir,
                                                                       model_name,
-                                                                      epoch)
+                                                                      prev_epoch)
 
         # bw = GenerationTF(model_name =  model_name, kernel_regularizer=True, kernel_constraint=True)
 
@@ -868,7 +869,7 @@ if __name__ == '__main__':
     parser.add_argument(
             '--batch_size',
             type=int,
-            default=1,
+            default=16,
             help='input patch size')
 
     parser.add_argument(
