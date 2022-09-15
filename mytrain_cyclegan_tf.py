@@ -820,7 +820,7 @@ def main(args):
                                                 input_bias=True)
 
         ckpt_dir = os.path.join(base_path, 'checkpoint', model_name + model_sig)
-        callback_ckpt = SaveModelH5(path=ckpt_dir, name=model_name + model_sig)
+        callback_ckpt = SaveModelH5(path=ckpt_dir, name=model_name + model_sig, initial_value_threshold=prev_loss)
 
         callbacks = get_training_callbacks(['tensorboard'],
                                             base_path=base_path, model_name=model_name + model_sig,
