@@ -72,6 +72,7 @@ class bwutils():
                 input_max = 1.,
                 input_bits =16,
                 input_bias = True,
+                use_unprocess=False,
                 loss_scale = 1,
                 alpha_for_gamma = 0.05,
                 beta_for_gamma = (1./2.2),
@@ -108,6 +109,7 @@ class bwutils():
         self.input_bits = input_bits
         self.input_max = input_max
         self.input_bias = input_bias
+        self.use_unprocess = use_unprocess
         self.alpha_for_gamma = alpha_for_gamma
         self.beta_for_gamma =  beta_for_gamma
         self.upscaling_factor = upscaling_factor
@@ -509,6 +511,31 @@ class bwutils():
         print('>>>>>>> raw.shape', raw.shape)
         raw = self.get_patternized_1ch_to_3ch_image(raw)
         print('<<<<<<< raw.shape', raw.shape)
+
+        # unprocess
+        def unprocess(x, m):
+            # de-ltm
+            x = 0.5 -tf.math.sin(tf.math.asin(1-2*x)/3) # 3*(x**2) -2*(x**3),  0.5 -np.sin(np.arcsin(1-2*x)/3)
+
+            # de-gamma
+            x = tf.math.pow(x, 2.2) # x**(1/2.2)
+
+            # iwb
+            if m == tf.estimator.ModeKeys.TRAIN:
+                rgain = tf.random.uniform(shape=[1], minval=1.9, maxval=2.4)
+                ggain = tf.constant([1.], dtype=tf.float32)
+                bgain = tf.random.uniform(shape=[1], minval=1.5, maxval=1.9)
+                gain = tf.concat([rgain, ggain, bgain], axis=-1)
+            else:
+                gain = tf.constant([(1.9+2.4)/2, 1., (1.5+1.9)/2 ], dtype=tf.float32)
+
+            x = x * gain
+
+            return x
+        if self.use_unprocess:
+            print("USE UNPROCESS, ", self.use_unprocess)
+            srgb = unprocess(srgb, mode)
+
 
 
         # augmentation

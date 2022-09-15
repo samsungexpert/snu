@@ -636,6 +636,7 @@ def main(args):
                     patch_size=patch_size,
                     crop_size=patch_size,
                     input_max=input_max,
+                    use_unprocess=True,
                     loss_type=loss_type, # 'rgb', 'yuv', 'ploss'
                     loss_mode='2norm',
                     loss_scale=1e4,
