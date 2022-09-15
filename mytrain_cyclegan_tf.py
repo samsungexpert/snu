@@ -516,13 +516,15 @@ class TensorBoardImageCycle(Callback):
 
 class SaveModelH5(tf.keras.callbacks.Callback):
 
-    def __init__(self, path, name):
+    def __init__(self, path, name, initial_value_threshold):
         super().__init__()
         self.path = path
         self.name = name
+        self.initial_value_threshold=initial_value_threshold
 
     def on_train_begin(self, logs=None):
          self.val_loss = []
+         self.val_loss.append(self.initial_value_threshold)
 
 
     def on_epoch_end(self, epoch, logs=None):
@@ -584,10 +586,10 @@ def load_model_if_exists(model, model_dir, model_name, ckpt_name=None):
                 best_weight = weights[-1]
                 print('---------------------> ', best_weight)
                 n.load_weights(best_weight)
-                idx = best_weight.rfind(model_name)
-                prev_epoch = int(best_weight[idx-6:idx-1])
+                idx = best_weight[len(model_dir):]
+                prev_epoch = int(best_weight[len(model_dir)+1:len(model_dir)+6])
                 prev_loss = float(best_weight.split('_')[-1][:-3])
-                print('prev epoch', prev_epoch)
+                print('prev epoch', prev_epoch, ', prev_loss:', prev_loss)
             else:
                 print('===========> TRAINED WEIGHTS NOT EXIST', len(weights))
     return model, prev_epoch, prev_loss
@@ -833,7 +835,7 @@ def main(args):
         model.fit(dataset_train,
                     epochs=myepoch*more_ckpt_ratio,
                     steps_per_epoch=(cnt_train // (batch_size*more_ckpt_ratio)) + 1,
-                    initial_epoch=0,
+                    initial_epoch=prev_epoch+1,
                     validation_data=dataset_eval,
                     validation_steps=cnt_valid // batch_size_eval,
                     validation_freq=1,
