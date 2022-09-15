@@ -16,10 +16,10 @@ import tensorflow_addons as tfa
 from mymodel_tf import save_as_tflite, GenerationTF
 from myutils_tf import *
 
+os.environ["CUDA_VISIBLE_DEVICES"]='0'
 # os.environ["CUDA_VISIBLE_DEVICES"]='-1'
 # os.environ["CUDA_VISIBLE_DEVICES"]='6'
-# To use limit number of GPU
-os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
+# os.environ["CUDA_VISIBLE_DEVICES"] = "0,1"
 
 
 
@@ -306,19 +306,14 @@ class CycleGan(tf.keras.Model):
         self.bayer_loss_fn = bayer_loss_fn
 
     def save_models(self, base_path:str, name:str, include_optimizer:bool=False):
-        name_G = os.path.join(base_path, 'G_'+name)
-        name_F = os.path.join(base_path, 'F_'+name)
-        name_X = os.path.join(base_path, 'X_'+name)
-        name_Y = os.path.join(base_path, 'Y_'+name)
-
-
-
-        self.gen_G.save(name_G,  include_optimizer=include_optimizer)
-        self.gen_F.save(name_F,  include_optimizer=include_optimizer)
-        self.disc_X.save(name_X, include_optimizer=include_optimizer)
-        self.disc_Y.save(name_Y, include_optimizer=include_optimizer)
-
-
+        prefix = ['G', 'F', 'X', 'Y']
+        ns = name.split('_')
+        net = [self.gen_G, self.gen_F, self.disc_X, self.disc_Y]
+        for p, n in zip(prefix, net):
+            pre = ns[0] + '_' + p
+            new_name = '_'.join([pre] + ns[1:])
+            new_name = os.path.join(base_path, new_name)
+            n.save(new_name, include_optimizer=False)
 
 
     def train_step(self, batch_data):
@@ -539,10 +534,15 @@ class SaveModelH5(tf.keras.callbacks.Callback):
         if current_val_loss <= min(self.val_loss):
             print('Find lowest val_loss. Saving entire model.')
             path = os.path.join(self.path, '{epoch:05d}_%s_{loss:.5e}.h5' % (self.name))
+            print(path)
 
             os.makedirs(self.path, exist_ok=True)
             self.model.save_models(self.path,  '%05d_%s_%.5e.h5' % (epoch, self.name, current_val_loss), include_optimizer=True)
-            # self.model.save(path, save_format='tf') # < ----- Here
+
+            # spath = os.path.join(self.path, f'{epoch:05d}_%s_{current_val_loss:.5e}' % (self.name))
+            # os.makedirs(spath, exist_ok=True)
+            # self.model.save(spath, save_format="tf") # < ----- Here
+            # exit()
 
 
 
@@ -567,6 +567,37 @@ def discriminator_loss_fn(real, fake):
 ###########################################################################
 
 
+# def load_models(model, path):
+
+def load_model_if_exists(model, model_dir, model_name, ckpt_name=None):
+    prev_epoch = 0
+    prev_loss = np.inf
+    if os.path.exists(model_dir):
+
+        prefix = ['G', 'F', 'X', 'Y']
+        net = [model.gen_G, model.gen_F, model.disc_X, model.disc_Y]
+
+        for p, n in zip(prefix, net):
+            weights = glob.glob(os.path.join(model_dir, f'*_{p}_*.h5' ))
+            if len(weights) > 0:
+                weights.sort()
+                best_weight = weights[-1]
+                print('---------------------> ', best_weight)
+                n.load_weights(best_weight)
+                idx = best_weight.rfind(model_name)
+                prev_epoch = int(best_weight[idx-6:idx-1])
+                prev_loss = float(best_weight.split('_')[-1][:-3])
+                print('prev epoch', prev_epoch)
+            else:
+                print('===========> TRAINED WEIGHTS NOT EXIST', len(weights))
+    return model, prev_epoch, prev_loss
+
+
+
+
+###########################################################################
+
+
 
 def main(args):
 
@@ -584,6 +615,8 @@ def main(args):
     model_sig = args.model_sig
     myepoch = args.epoch
 
+    print('test, ', args.test, type(args.test))
+    # exit()
 
     # loss_type = ['rgb', 'yuv', 'ploss'] # 'rgb', 'yuv', 'ploss'
     loss_type = ['rgb', 'yuv', 'ssim']  # 'rgb', 'yuv', 'ploss
@@ -629,6 +662,13 @@ def main(args):
     eval_files = get_tfrecords(data_path, 'test*IP')
     viz_files = get_tfrecords(data_path, 'viz')
 
+    # if args.test:
+    #     data_path = 'datasets/sidd/tfrecords'
+    #     train_files = get_tfrecords(data_path, 'train*S6_noisy')
+    #     eval_files = get_tfrecords(data_path, 'test*IP')
+    #     viz_files = get_tfrecords(data_path, 'viz')
+
+
     print('data_path, ', data_path)
     print('\n'.join(train_files))
     print('\n'.join(eval_files))
@@ -649,8 +689,8 @@ def main(args):
     batch_size      = batch_size * NGPU  # 128
     batch_size_eval = batch_size * NGPU
     batch_size_viz  = batch_size  # 128
-    batch_size      = 32
-    batch_size_eval = 32
+    # batch_size      = 32
+    # batch_size_eval = 32
     batch_size_viz  = 5
     print('batch_size: ', batch_size, batch_size_eval, batch_size_viz)
     # exit()
@@ -746,7 +786,14 @@ def main(args):
         print('model created done done')
         ########################################
 
+        # load pre-trained model
+        # model, prev_epoch, prev_loss = load_checkpoint_if_exists(model, model_dir, model_name, trained_model_file_name)
 
+        epoch = 9
+        cycle_gan_model, prev_epoch, prev_loss = load_model_if_exists(cycle_gan_model,
+                                                                      model_dir,
+                                                                      model_name,
+                                                                      epoch)
 
         # bw = GenerationTF(model_name =  model_name, kernel_regularizer=True, kernel_constraint=True)
 
@@ -837,7 +884,7 @@ if __name__ == '__main__':
     parser.add_argument(
             '--model_name',
             type=str,
-            default='cycle_gan',
+            default='cyclegan',
             help='resnet_flat, resnet_ed, bwunet, unet, unetv2')
 
     parser.add_argument(
