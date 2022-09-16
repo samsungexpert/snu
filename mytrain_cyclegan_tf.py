@@ -695,7 +695,7 @@ def main(args):
     batch_size_viz   = batch_size  # 128
     # batch_size      = 32
     # batch_size_eval = 32
-    batch_size_viz  = 5
+    batch_size_viz  = 8
     print('batch_size: ', batch_size_train, batch_size_eval, batch_size_viz)
     #exit()
     train_params = {'filenames': train_files,
