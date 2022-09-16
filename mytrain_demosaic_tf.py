@@ -68,14 +68,14 @@ def main(args):
     if 'mit' in model_sig:
         input_bits = 8
         input_max = 255
-        # data_path = '/home/team19/datasets/mit/tfrecords'
-        data_path = '/data03/team01/mit/tfrecords'
+        data_path = '/home/team19/datasets/mit/tfrecords'
+        # data_path = '/data03/team01/mit/tfrecords'
         cnt_train, cnt_valid = 260000, 6000 # mit
     elif 'pixelshift' in model_sig:
         input_bits = 16
         input_max = 65535
-        # data_path = '/home/team19/datasets/pixelshift/tfrecords'
-        data_path = '/data03/team01/pixelshift/tfrecords'
+        data_path = '/home/team19/datasets/pixelshift/tfrecords'
+        # data_path = '/data03/team01/pixelshift/tfrecords'
         cnt_train, cnt_valid =  92800, 4800 # pixelshift
     else:
         ValueError('unknown model_sig path', model_sig)
@@ -99,7 +99,7 @@ def main(args):
     print('\n'.join(eval_files))
     print('\n'.join(viz_files))
 
-    # exit()
+    exit()
 
     # get util class
     if args.test:
@@ -139,17 +139,17 @@ def main(args):
 
     if args.test:
         batch_size = 1
-    batch_size      = batch_size * NGPU  # 128
-    batch_size_eval = batch_size * NGPU
-    batch_size_viz  = batch_size  # 128
-    batch_size_viz  = 16
+    batch_size_train = batch_size * NGPU  # 128
+    batch_size_eval  = batch_size * NGPU
+    batch_size_viz   = batch_size  # 128
+    batch_size_viz   = 16
     print(batch_size, batch_size_eval, batch_size_viz)
     # exit()
     train_params = {'filenames': train_files,
                     'mode': tf.estimator.ModeKeys.TRAIN,
                     'threads': 2,
                     'shuffle_buff': 256,
-                    'batch': batch_size,
+                    'batch': batch_size_train,
                     'input_type':input_type,
                     'train_type': 'demosaic'
                     }
@@ -272,7 +272,7 @@ if __name__ == '__main__':
     parser.add_argument(
             '--epoch',
             type=int,
-            default=500,
+            default=1000,
             help='epoch')
 
     parser.add_argument(
@@ -290,7 +290,7 @@ if __name__ == '__main__':
     parser.add_argument(
             '--cfa_pattern',
             type=str,
-            default='tetra',
+            default='sedec',
             help='bayer, tetra, nona, sedec')
 
 
@@ -326,5 +326,5 @@ if __name__ == '__main__':
     main(args)
 
 
-# CUDA_VISIBLE_DEVICES=0 python mytrain_demosaic_tf.py --model_sig=mit
-# CUDA_VISIBLE_DEVICES=1 python mytrain_demosaic_tf.py --model_sig=pixelshift
+# CUDA_VISIBLE_DEVICES=0 python mytrain_demosaic_tf.py --model_sig=_mit
+# CUDA_VISIBLE_DEVICES=1 python mytrain_demosaic_tf.py --model_sig=_pixelshift
