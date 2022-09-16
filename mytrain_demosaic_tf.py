@@ -65,18 +65,20 @@ def main(args):
     loss_type = ['rgb', 'yuv', 'ssim']  # 'rgb', 'yuv', 'ploss
 
 
-    if 'mit' in data_path:
+    if 'mit' in model_sig:
         input_bits = 8
         input_max = 255
-        data_path = '/home/team19/datasets/mit/tfrecords'
-        # data_path = '/data03/team01/mit/tfrecords'
-    elif 'pixelshift' in data_path:
+        # data_path = '/home/team19/datasets/mit/tfrecords'
+        data_path = '/data03/team01/mit/tfrecords'
+        cnt_train, cnt_valid = 260000, 6000 # mit
+    elif 'pixelshift' in model_sig:
         input_bits = 16
         input_max = 65535
-        data_path = '/home/team19/datasets/pixelshift/tfrecords'
-        # data_path = '/data03/team01/pixelshift/tfrecords'
+        # data_path = '/home/team19/datasets/pixelshift/tfrecords'
+        data_path = '/data03/team01/pixelshift/tfrecords'
+        cnt_train, cnt_valid =  92800, 4800 # pixelshift
     else:
-        ValueError('unknown data path', data_path)
+        ValueError('unknown model_sig path', model_sig)
         exit()
 
 
@@ -89,7 +91,7 @@ def main(args):
         files.sort()
         return files
     train_files = get_tfrecords(data_path, 'train')
-    eval_files = get_tfrecords(data_path, 'test')
+    eval_files = get_tfrecords(data_path, 'test') + get_tfrecords(data_path, 'valid')
     viz_files = get_tfrecords(data_path, 'viz')
 
     print('data_path, ', data_path)
@@ -97,6 +99,7 @@ def main(args):
     print('\n'.join(eval_files))
     print('\n'.join(viz_files))
 
+    # exit()
 
     # get util class
     if args.test:
@@ -105,7 +108,7 @@ def main(args):
         cache_enable=True
 
     utils = bwutils(input_type,
-                    cfa_pattern='bayer',
+                    cfa_pattern=args.cfa_pattern,
                     patch_size=patch_size,
                     crop_size=patch_size,
                     input_max=input_max,
@@ -139,13 +142,13 @@ def main(args):
     batch_size      = batch_size * NGPU  # 128
     batch_size_eval = batch_size * NGPU
     batch_size_viz  = batch_size  # 128
-    batch_size_viz  = 8
+    batch_size_viz  = 16
     print(batch_size, batch_size_eval, batch_size_viz)
     # exit()
     train_params = {'filenames': train_files,
                     'mode': tf.estimator.ModeKeys.TRAIN,
                     'threads': 2,
-                    'shuffle_buff': 128,
+                    'shuffle_buff': 256,
                     'batch': batch_size,
                     'input_type':input_type,
                     'train_type': 'demosaic'
@@ -153,7 +156,7 @@ def main(args):
     eval_params = {'filenames': eval_files,
                    'mode': tf.estimator.ModeKeys.EVAL,
                    'threads': 2,
-                   'shuffle_buff': 128,
+                   'shuffle_buff': 256,
                    'batch': batch_size_eval,
                    'input_type': input_type,
                    'train_type': 'demosaic'
@@ -162,7 +165,7 @@ def main(args):
     viz_params = {'filenames': viz_files,
                    'mode': tf.estimator.ModeKeys.EVAL,
                    'threads': 2,
-                   'shuffle_buff': 128,
+                   'shuffle_buff': 256,
                    'batch': batch_size_viz,
                    'input_type': input_type,
                    'train_type': 'demosaic'
@@ -177,11 +180,9 @@ def main(args):
 
 
 
-    cnt_train, cnt_valid = 260000, 6000 # w/o noise
     if args.test:
         cnt_train, cnt_valid = 8, 8 # for test
-
-    cnt_viz = 8
+    cnt_viz = 16
 
 
     #########################
@@ -265,7 +266,7 @@ if __name__ == '__main__':
     parser.add_argument(
             '--batch_size',
             type=int,
-            default=128,
+            default=256,
             help='input patch size')
 
     parser.add_argument(
@@ -283,8 +284,15 @@ if __name__ == '__main__':
     parser.add_argument(
             '--model_name',
             type=str,
-            default='demosaic',
+            default='remosaic',
             help='resnet_flat, resnet_ed, bwunet, unet, unetv2')
+
+    parser.add_argument(
+            '--cfa_pattern',
+            type=str,
+            default='tetra',
+            help='bayer, tetra, nona, sedec')
+
 
     parser.add_argument(
             '--model_sig',
@@ -318,3 +326,5 @@ if __name__ == '__main__':
     main(args)
 
 
+# CUDA_VISIBLE_DEVICES=0 python mytrain_demosaic_tf.py --model_sig=mit
+# CUDA_VISIBLE_DEVICES=1 python mytrain_demosaic_tf.py --model_sig=pixelshift

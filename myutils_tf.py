@@ -464,6 +464,30 @@ class bwutils():
         return patternized, image
 
 
+    def parse_tfrecord_remosaic(self, example, mode):
+        if self.input_bits == 8:
+            dtype = 'uint8'
+        elif self.input_bits == 16:
+            dtype = 'uint16'
+
+        image = self.get_image_from_single_example(example, key='image', num_channels=3, dtype=dtype)
+        if mode == tf.estimator.ModeKeys.TRAIN:
+            image = self.data_augmentation(image)
+
+        image = self.scale_by_input_max(image)
+        image = tf.clip_by_value(image, 0, 1)
+
+        if self.input_bias:
+             image       = (image       * 2) - 1
+
+        patternized = self.get_patternized(image, self.input_type)
+
+        print('====================== patternized.shape ', patternized.shape)
+        print('====================== image.shape ', image.shape)
+
+        return patternized, image
+
+
     def data_augmentation_cycle(self, srgb, raw):
 
         # flip

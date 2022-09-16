@@ -376,7 +376,7 @@ class CycleGan(tf.keras.Model):
             id_loss_G = (
                 self.identity_loss_fn(real_y, same_y)
                 * self.lambda_cycle
-                * self.lambda_identity * 32
+                * self.lambda_identity * 4
             )
             id_loss_F = (
                 self.identity_loss_fn(real_x, same_x)
@@ -390,7 +390,7 @@ class CycleGan(tf.keras.Model):
 
             # Discriminator loss
             disc_X_loss = self.discriminator_loss_fn(disc_real_x, disc_fake_x)
-            disc_Y_loss = self.discriminator_loss_fn(disc_real_y, disc_fake_y) * 16
+            disc_Y_loss = self.discriminator_loss_fn(disc_real_y, disc_fake_y) * 4
 
         # Get the gradients for the generators
         grads_G = tape.gradient(total_loss_G, self.gen_G.trainable_variables)

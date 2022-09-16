@@ -64,7 +64,7 @@ class GenerationTF():
             self.model = self.resnet_ed(self.input_shape)
         elif model_name == 'resnet_flat':
             self.model = self.resnet_flat(self.input_shape)
-        elif model_name == 'demosaic':
+        elif model_name == 'demosaic' or model_name == 'remosaic':
             self.model = self.demosaic_hansol(self.input_shape)
         else:
             print('====================== unknown model name, ', model_name)
