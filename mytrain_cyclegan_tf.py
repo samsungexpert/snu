@@ -300,8 +300,9 @@ class CycleGan(tf.keras.Model):
         # self.cycle_loss_fn    = tf.keras.losses.MeanAbsoluteError( )
         # self.identity_loss_fn = tf.keras.losses.MeanAbsoluteError( )
 
-        self.cycle_loss_fn    = bayer_loss_fn
-        self.identity_loss_fn = bayer_loss_fn
+        # self.cycle_loss_fn    = abs_loss_fn
+        self.abs_loss_fn = abs_loss_fn
+        # self.identity_loss_fn = bayer_loss_fn
 
         self.bayer_loss_fn = bayer_loss_fn
 
@@ -369,17 +370,17 @@ class CycleGan(tf.keras.Model):
             gen_F_loss = self.generator_loss_fn(disc_fake_x)
 
             # Generator cycle loss
-            cycle_loss_G = self.cycle_loss_fn(real_y, cycled_y) * self.lambda_cycle
-            cycle_loss_F = self.cycle_loss_fn(real_x, cycled_x) * self.lambda_cycle
+            cycle_loss_G = self.abs_loss_fn(real_y, cycled_y) * self.lambda_cycle
+            cycle_loss_F = self.bayer_loss_fn(real_x, cycled_x) * self.lambda_cycle
 
             # Generator identity loss
             id_loss_G = (
-                self.identity_loss_fn(real_y, same_y)
+                self.abs_loss_fn(real_y, same_y)
                 * self.lambda_cycle
                 * self.lambda_identity * 4
             )
             id_loss_F = (
-                self.identity_loss_fn(real_x, same_x)
+                self.bayer_loss_fn(real_x, same_x)
                 * self.lambda_cycle
                 * self.lambda_identity
             )
@@ -550,21 +551,27 @@ class SaveModelH5(tf.keras.callbacks.Callback):
 
 ###########################################################################
 # adv_loss_fn = tf.keras.losses.MeanSquaredError(reduction=tf.keras.losses.Reduction.NONE)
-def adv_loss_fn(y_true, y_pred):
+def abs_loss_fn(y_true, y_pred):
         myloss = tf.keras.backend.mean(tf.keras.backend.abs(y_true - y_pred))
         return myloss
+def mse_loss_fn(y_true, y_pred):
+        myloss = tf.keras.backend.mean(tf.keras.backend.square(y_true - y_pred))
+        return myloss
 
+# def adv_loss_fn(y_true, y_pred):
+#         myloss = tf.keras.backend.mean(tf.keras.backend.square(y_true - y_pred))
+#         return myloss
 
 # adv_loss_fn = tf.keras.losses.MeanSquaredError()
 def generator_loss_fn(fake):
-    fake_loss = adv_loss_fn(tf.ones_like(fake), fake)
+    fake_loss = mse_loss_fn(tf.ones_like(fake), fake)
     return fake_loss
 
 
 # Define the loss function for the discriminators
 def discriminator_loss_fn(real, fake):
-    real_loss = adv_loss_fn(tf.ones_like(real), real)
-    fake_loss = adv_loss_fn(tf.zeros_like(fake), fake)
+    real_loss = mse_loss_fn(tf.ones_like(real), real)
+    fake_loss = mse_loss_fn(tf.zeros_like(fake), fake)
     return (real_loss + fake_loss) * 0.5
 ###########################################################################
 
@@ -636,7 +643,7 @@ def main(args):
                     patch_size=patch_size,
                     crop_size=patch_size,
                     input_max=input_max,
-                    use_unprocess=True,
+                    use_unprocess=False,
                     loss_type=loss_type, # 'rgb', 'yuv', 'ploss'
                     loss_mode='2norm',
                     loss_scale=1e4,
@@ -894,7 +901,7 @@ if __name__ == '__main__':
     parser.add_argument(
             '--model_sig',
             type=str,
-            default='_unprocess',
+            default='_hope',
             help='model postfix')
 
     parser.add_argument(
