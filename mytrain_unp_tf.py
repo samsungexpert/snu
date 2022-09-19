@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 from mymodel_tf import save_as_tflite, GenerationTF
 from myutils_tf import *
 
-# os.environ["CUDA_VISIBLE_DEVICES"]='-1'
+os.environ["CUDA_VISIBLE_DEVICES"]='6'
 # To use limit number of GPU
 # os.environ["CUDA_VISIBLE_DEVICES"] = "2,3"
 
@@ -68,18 +68,27 @@ def main(args):
     loss_type = ['rgb', 'yuv', 'ssim']  # 'rgb', 'yuv', 'ploss
     # loss_type = ['rgb']  # 'rgb', 'yuv', 'ploss
     # loss_type = ['yuv']
-
+    def get_tfrecords(path, keyword):
+        files = tf.io.gfile.glob(os.path.join(path, f'*{keyword}*tfrecords'))
+        files.sort()
+        return files
     if 'mit' in model_sig:
         input_bits = 8
         input_max = 255
         data_path = '/home/team19/datasets/mit/tfrecords'
         # data_path = '/data03/team01/mit/tfrecords'
+        eval_files = get_tfrecords(data_path, 'val')
+        viz_files = get_tfrecords(data_path, 'viz')
+
         cnt_train, cnt_valid = 260000, 6000 # mit
     elif 'pixelshift' in model_sig:
         input_bits = 16
         input_max = 65535
         data_path = '/home/team19/datasets/pixelshift/tfrecords'
         # data_path = '/data03/team01/pixelshift/tfrecords'
+
+        eval_files = get_tfrecords(data_path, 'valid')
+        viz_files = get_tfrecords(data_path, 'viz10')
         cnt_train, cnt_valid =  92800, 4800 # pixelshift
     else:
         ValueError('unknown model_sig path', model_sig)
@@ -121,6 +130,7 @@ def main(args):
     train_files = get_tfrecords(data_path, 'train')
     eval_files = get_tfrecords(data_path, 'valid')
     viz_files = get_tfrecords(data_path, 'viz')
+
 
     print('data_path, ', data_path)
     print('\n'.join(train_files))
@@ -294,7 +304,11 @@ if __name__ == '__main__':
     parser.add_argument(
             '--model_sig',
             type=str,
+<<<<<<< HEAD
             default='_mit_unp',
+=======
+            default='_pixelshift_unp',
+>>>>>>> 84da688d4a3e598839188198f161c41a4e237c41
             help='model postfix')
 
     parser.add_argument(
