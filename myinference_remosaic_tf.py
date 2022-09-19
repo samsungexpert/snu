@@ -48,9 +48,10 @@ def normalize1_and_gamma(arr, bits=16, beta=1/2.2):
 def main():
     # model name
     model_name = 'demosaic'
+    model_name = 'remosaic'
 
     # model sig
-    model_sig = 'mit'
+    model_sig = 'mit_sedec'
     # get model
     model = get_model(model_name, model_sig)
     # model.summary()
@@ -60,14 +61,15 @@ def main():
     if model_name in ['demosaic']:
         cell_size=1
         cfa_pattern = 'bayer'
-    elif model_sig in ['tetra']:
+    elif 'tetra' in model_sig:
         cell_size=2
         cfa_pattern = 'tetra'
-    elif model_sig in ['sedec']:
+    elif 'sedec' in model_sig:
         cell_size=4
         cfa_pattern = 'sedec'
     else:
         ValueError('Unknown model_name or model_sig', model_name, model_sig)
+        print('Unknown model_name or model_sig', model_name, model_sig)
         exit()
 
 

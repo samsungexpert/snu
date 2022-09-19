@@ -98,7 +98,6 @@ class bwutils():
         else:
             raise ValueError('unknown cfa_pattern, ', cfa_pattern)
 
-
         for lt  in loss_type:
             if lt not in ['rgb', 'yuv', 'ploss', 'ssim']:
                 raise ValueError('unknown loss type, ', lt)
@@ -533,29 +532,11 @@ class bwutils():
         raw = self.get_patternized_1ch_to_3ch_image(raw)
         print('<<<<<<< raw.shape', raw.shape)
 
-        # unprocess
-        def unprocess(x, m):
-            # de-ltm
-            x = 0.5 -tf.math.sin(tf.math.asin(1-2*x)/3) # 3*(x**2) -2*(x**3),  0.5 -np.sin(np.arcsin(1-2*x)/3)
 
-            # de-gamma
-            x = tf.math.pow(x, 2.2) # x**(1/2.2)
-
-            # iwb
-            if m == tf.estimator.ModeKeys.TRAIN:
-                rgain = tf.random.uniform(shape=[1], minval=1.9, maxval=2.4)
-                ggain = tf.constant([1.], dtype=tf.float32)
-                bgain = tf.random.uniform(shape=[1], minval=1.5, maxval=1.9)
-                gain = tf.concat([rgain, ggain, bgain], axis=-1)
-            else:
-                gain = tf.constant([(1.9+2.4)/2, 1., (1.5+1.9)/2 ], dtype=tf.float32)
-
-            x = x * gain
-
-            return x
         if self.use_unprocess:
             print("USE UNPROCESS, ", self.use_unprocess)
-            srgb = unprocess(srgb, mode)
+            # srgb = unprocess(srgb, mode)
+            srgb = self.unprocess(srgb, mode)
 
 
 
@@ -631,7 +612,8 @@ class bwutils():
         elif params['train_type'] == 'demosaic':
             parse_fn = self.parse_tfrecord_demosaic
 
-        dataset = dataset.map(partial(parse_fn, mode=params['mode']), num_parallel_calls=tf.data.experimental.AUTOTUNE)
+        dataset = dataset.map(partial(parse_fn, mode=params['mode']),
+                              num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
         # Dataset cache need 120G Main memory
         if self.cache_enable is True:

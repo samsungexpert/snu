@@ -69,6 +69,25 @@ def main(args):
     # loss_type = ['rgb']  # 'rgb', 'yuv', 'ploss
     # loss_type = ['yuv']
 
+    if 'mit' in model_sig:
+        input_bits = 8
+        input_max = 255
+        data_path = '/home/team19/datasets/mit/tfrecords'
+        # data_path = '/data03/team01/mit/tfrecords'
+        cnt_train, cnt_valid = 260000, 6000 # mit
+    elif 'pixelshift' in model_sig:
+        input_bits = 16
+        input_max = 65535
+        data_path = '/home/team19/datasets/pixelshift/tfrecords'
+        # data_path = '/data03/team01/pixelshift/tfrecords'
+        cnt_train, cnt_valid =  92800, 4800 # pixelshift
+    else:
+        ValueError('unknown model_sig path', model_sig)
+        exit()
+
+
+
+
     # get util class
     if args.test:
         cache_enable=False
@@ -80,18 +99,16 @@ def main(args):
                     patch_size=patch_size,
                     crop_size=patch_size,
                     input_max=input_max,
+                    input_bits=input_bits,
+                    use_unprocess=args.use_unprocess,
                     loss_type=loss_type, # 'rgb', 'yuv', 'ploss'
                     loss_mode='2norm',
                     loss_scale=1e4,
                     cache_enable=cache_enable)
 
-
-
     base_path = 'model_dir'
     os.makedirs(base_path, exist_ok=True)
     model_dir = os.path.join(base_path, 'checkpoint', model_name + model_sig)
-
-
 
     ## dataset
     if args.test:
@@ -159,6 +176,7 @@ def main(args):
     # print('train set len : ', dataset_train.element_spec)
 
 
+    print('use_unprocess, ', args.use_unprocess)
 
     cnt_train, cnt_valid = 92800, 4800 # w/o noise
     cnt_train, cnt_valid = 96200, 4800 # with noise
@@ -167,14 +185,15 @@ def main(args):
 
     cnt_viz = 10
 
+    # exit()
 
     #########################
     ## training gogo
 
-    if True:
+    # if True:
 
-    # strategy = tf.distribute.MirroredStrategy()
-    # with strategy.scope():
+    strategy = tf.distribute.MirroredStrategy()
+    with strategy.scope():
 
         if input_type not in ['shrink', 'nonshrink', 'nonshrink_4ch', 'rgb']:
             raise ValueError('unkown input_type, ', input_type)
@@ -189,7 +208,7 @@ def main(args):
         if False:
             model.input.set_shape(1 + model.input.shape[1:]) # to freeze model
         model.save(os.path.join(base_path, 'checkpoint' , f'{model_name}_model_structure.h5'), include_optimizer=False)
-        model.summary()
+        # model.summary()
 
         optimizer = tf.keras.optimizers.Adam(learning_rate=LEARNING_RATE, name='Adam')
         model.compile(optimizer=optimizer,  # 'adam',
@@ -282,6 +301,12 @@ if __name__ == '__main__':
             # default='/home/team19/datasets/pixelshift/tfrecords',
             default='/data03/team01/pixelshift/tfrecords',
             help='add noise on dec input')
+
+    parser.add_argument(
+            '--use_unprocess',
+            type=bool,
+            default=True,
+            help='use_unprocess')
 
     parser.add_argument(
             '--test',
