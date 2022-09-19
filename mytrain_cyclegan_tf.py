@@ -494,9 +494,9 @@ class TensorBoardImageCycle(Callback):
             # print('y_fake.shape', y_fake.shape)
             # print('x_fake.shape', x_fake.shape)
 
-            print('x: %.2f, %.2f' %( tf.reduce_min(x).numpy(), tf.reduce_max(x).numpy()), end='')
-            print(', y: %.2f, %.2f' %( tf.reduce_min(y).numpy(), tf.reduce_max(y).numpy()), end='')
-            print(', x_fake: %.2f, %.2f' % (  tf.reduce_min(x_fake).numpy(), tf.reduce_max(x_fake).numpy()), end='')
+            print('x: %.2f, %.2f'        % ( tf.reduce_min(x).numpy(),      tf.reduce_max(x).numpy()), end='')
+            print(', y: %.2f, %.2f'      % ( tf.reduce_min(y).numpy(),      tf.reduce_max(y).numpy()), end='')
+            print(', x_fake: %.2f, %.2f' % ( tf.reduce_min(x_fake).numpy(), tf.reduce_max(x_fake).numpy()), end='')
             print(', y_fake: %.2f, %.2f' % ( tf.reduce_min(y_fake).numpy(), tf.reduce_max(y_fake).numpy()))
 
             all_images = tf.concat( [tf.concat([x, y]      , axis=2),
