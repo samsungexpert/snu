@@ -45,36 +45,38 @@ def normalize1_and_gamma(arr, bits=16, beta=1/2.2):
     return arr
 
 
-def main():
+def main(model_name, model_sig):
     # model name
-    model_name = 'demosaic'
+    #model_name = 'demosaic'
 
     # model sig
-    model_sig = 'mit'
+    #model_sig = 'mit'
     # get model
     model = get_model(model_name, model_sig)
     # model.summary()
 
 
+    
     # cellsize
     if model_name in ['demosaic']:
         cell_size=1
         cfa_pattern = 'bayer'
-    elif model_sig in ['tetra']:
+    elif 'tetra' in model_sig:
         cell_size=2
         cfa_pattern = 'tetra'
-    elif model_sig in ['sedec']:
+    elif 'sedec' in model_sig:
         cell_size=4
         cfa_pattern = 'sedec'
     else:
         ValueError('Unknown model_name or model_sig', model_name, model_sig)
+        print('Unknown model_name or model_sig', model_name, model_sig)
         exit()
 
 
 
 
     # test data
-    PATH_PIXELSHIFT = 'C:/Users/AI38/datasets/pixelshfit/PixelShift200_test'
+    PATH_PIXELSHIFT = '/data/team19/pixelshift/PixelShift200_test'
     files = glob.glob(os.path.join(PATH_PIXELSHIFT, '*_3ch.npy'))
     pad_size = 32
     patch_size = 128
@@ -169,6 +171,18 @@ def main():
 
         # exit()
 
+def run():
+
+    args = [{'model_name':'remosaic', 'model_sig':'mit_sedec'},
+            {'model_name':'remosaic', 'model_sig':'pixelshift_sedec'},
+            {'model_name':'remosaic', 'model_sig':'mit_tetra'},
+            {'model_name':'remosaic', 'model_sig':'pixelshift_tetra'},
+            {'model_name':'demosaic', 'model_sig':'mit'},
+            {'model_name':'demosaic', 'model_sig':'pixelshift'}]
+    for arg in args:
+        model_name = arg['model_name']
+        model_sig  = arg['model_sig']
+        main(model_name, model_sig)
 
 if __name__ == '__main__':
-    main()
+    run()
