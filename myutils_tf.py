@@ -400,13 +400,10 @@ class bwutils():
         '''
         image ~ (0,1) normalized
         '''
-
-        std = 2 * (self.input_bits-10) * 24
-        noise_gaussian = tf.random.normal(image.shape) * std
+        noise_gaussian = tf.random.normal(image.shape) * self.input_bits
         noise_gaussian = self.scale_by_input_max(noise_gaussian)
 
-        pstd = 8
-        noise_poisson = tf.random.normal(image.shape) * tf.math.sqrt(image) * pstd
+        noise_poisson = tf.random.normal(image.shape) * tf.math.sqrt(image) * self.input_bits
         noise_poisson = self.scale_by_input_max(noise_poisson)
         print('------------------------------------------')
         print('------------------------------------------')
@@ -573,11 +570,64 @@ class bwutils():
 
         return srgb, raw
 
+
+    # unprocess
+    def unprocess(self, image, mode):
+        # de-ltm
+        image = 0.5 -tf.math.sin(tf.math.asin(1-2*image)/3) # 3*(x**2) -2*(x**3),  0.5 -np.sin(np.arcsin(1-2*x)/3)
+
+        # de-gamma
+        image = tf.math.pow(image, 2.2) # x**(1/2.2)
+
+        # add noise
+        image = self.add_noise_batch(image)
+
+        # iwb
+        if mode == tf.estimator.ModeKeys.TRAIN:
+            rgain = tf.random.uniform(shape=[1], minval=1.9, maxval=2.4)
+            ggain = tf.constant([1.], dtype=tf.float32)
+            bgain = tf.random.uniform(shape=[1], minval=1.5, maxval=1.9)
+            gain = tf.concat([rgain, ggain, bgain], axis=-1)
+        else:
+            gain = tf.constant([(1.9+2.4)/2, 1., (1.5+1.9)/2 ], dtype=tf.float32)
+
+        image = image * gain
+
+        image = tf.clip_by_value(image, 0, 1)
+
+        return image
+
+    def parse_tfrecord_unp(self, example, mode):
+
+        srgb = self.get_image_from_single_example(example, key='image', num_channels=3)
+        if mode == tf.estimator.ModeKeys.TRAIN:
+            srgb = self.data_augmentation(srgb)
+
+        srgb = self.scale_by_input_max(srgb)
+
+        if self.use_unprocess:
+            print("USE UNPROCESS, ", self.use_unprocess)
+            raw = self.unprocess(srgb, mode)
+
+
+        srgb = tf.clip_by_value(srgb, 0, 1)
+        raw  = tf.clip_by_value(raw , 0, 1)
+
+        if self.input_bias:
+             srgb = (srgb * 2) - 1
+             raw  = (raw  * 2) - 1
+
+        return srgb, raw
+
+
+
+
+
     def dataset_input_fn(self, params):
         dataset = tf.data.TFRecordDataset(params['filenames'])
 
         if params['train_type'] == 'unprocessing':
-            parse_fn = self.parse_tfrecord
+            parse_fn = self.parse_tfrecord_unp
         elif params['train_type'] == 'demosaic':
             parse_fn = self.parse_tfrecord_demosaic
 
@@ -674,7 +724,7 @@ class bwutils():
         vgg16_perceptual_loss = 0
 
         y_true  = y_true / (self.input_max/2) - 1
-        y_pred = y_pred / (self.input_max/2) - 1
+        y_pred  = y_pred / (self.input_max/2) - 1
         for loss_model in self.loss_model:
             vgg16_perceptual_loss += tf.keras.backend.mean(
                     self.loss_norm(loss_model(y_true) - loss_model(y_pred)))
