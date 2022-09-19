@@ -45,16 +45,13 @@ def normalize1_and_gamma(arr, bits=16, beta=1/2.2):
     return arr
 
 
-def main():
+def main(model_name, model_sig):
     # model name
-    model_name = 'demosaic'
-    model_name = 'remosaic'
 
-    # model sig
-    model_sig = 'mit_sedec'
     # get model
     model = get_model(model_name, model_sig)
     # model.summary()
+
 
 
     # cellsize
@@ -76,7 +73,7 @@ def main():
 
 
     # test data
-    PATH_PIXELSHIFT = 'C:/Users/AI38/datasets/pixelshfit/PixelShift200_test'
+    PATH_PIXELSHIFT = '/data/team19/pixelshift/PixelShift200_test'
     files = glob.glob(os.path.join(PATH_PIXELSHIFT, '*_3ch.npy'))
     pad_size = 32
     patch_size = 128
@@ -171,6 +168,18 @@ def main():
 
         # exit()
 
+def run():
+
+    args = [{'model_name':'remosaic', 'model_sig':'mit_sedec'},
+            {'model_name':'remosaic', 'model_sig':'pixelshift_sedec'},
+            {'model_name':'remosaic', 'model_sig':'mit_tetra'},
+            {'model_name':'remosaic', 'model_sig':'pixelshift_tetra'},
+            {'model_name':'demosaic', 'model_sig':'mit'},
+            {'model_name':'demosaic', 'model_sig':'pixelshift'}]
+    for arg in args:
+        model_name = arg['model_name']
+        model_sig  = arg['model_sig']
+        main(model_name, model_sig)
 
 if __name__ == '__main__':
-    main()
+    run()
