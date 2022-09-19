@@ -77,8 +77,6 @@ def main(args):
         input_max = 255
         data_path = '/home/team19/datasets/mit/tfrecords'
         # data_path = '/data03/team01/mit/tfrecords'
-        eval_files = get_tfrecords(data_path, 'val')
-        viz_files = get_tfrecords(data_path, 'viz')
 
         cnt_train, cnt_valid = 260000, 6000 # mit
     elif 'pixelshift' in model_sig:
@@ -87,8 +85,6 @@ def main(args):
         data_path = '/home/team19/datasets/pixelshift/tfrecords'
         # data_path = '/data03/team01/pixelshift/tfrecords'
 
-        eval_files = get_tfrecords(data_path, 'valid')
-        viz_files = get_tfrecords(data_path, 'viz10')
         cnt_train, cnt_valid =  92800, 4800 # pixelshift
     else:
         ValueError('unknown model_sig path', model_sig)
@@ -268,7 +264,7 @@ if __name__ == '__main__':
     parser.add_argument(
             '--input_max',
             type=float,
-            default=65535,
+            default=256,
             help='input_max')
 
     parser.add_argument(
@@ -304,11 +300,8 @@ if __name__ == '__main__':
     parser.add_argument(
             '--model_sig',
             type=str,
-<<<<<<< HEAD
             default='_mit_unp',
-=======
-            default='_pixelshift_unp',
->>>>>>> 84da688d4a3e598839188198f161c41a4e237c41
+            # default='_pixelshift_unp',
             help='model postfix')
 
     parser.add_argument(
