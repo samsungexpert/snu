@@ -99,7 +99,6 @@ def main(args):
     print('\n'.join(eval_files))
     print('\n'.join(viz_files))
 
-    exit()
 
     # get util class
     if args.test:

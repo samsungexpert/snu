@@ -113,13 +113,14 @@ def main(args):
     ## dataset
     if args.test:
         data_path = 'datasets/pixelshift/tfrecords'
+        data_path = 'datasets/mit/tfrecords'
     def get_tfrecords(path, keyword):
         files = tf.io.gfile.glob(os.path.join(path, f'*{keyword}*tfrecords'))
         files.sort()
         return files
     train_files = get_tfrecords(data_path, 'train')
     eval_files = get_tfrecords(data_path, 'valid')
-    viz_files = get_tfrecords(data_path, 'viz10')
+    viz_files = get_tfrecords(data_path, 'viz')
 
     print('data_path, ', data_path)
     print('\n'.join(train_files))
@@ -136,17 +137,17 @@ def main(args):
 
     if args.test:
         batch_size = 1
-    batch_size      = batch_size * NGPU  # 128
-    batch_size_eval = batch_size * NGPU
-    batch_size_viz  = batch_size  # 128
-    batch_size_viz  = 10
+    batch_size_train = batch_size * NGPU  # 128
+    batch_size_eval  = batch_size * NGPU
+    batch_size_viz   = batch_size  # 128
+    batch_size_viz   = 10
     print(batch_size, batch_size_eval, batch_size_viz)
     # exit()
     train_params = {'filenames': train_files,
                     'mode': tf.estimator.ModeKeys.TRAIN,
                     'threads': 2,
                     'shuffle_buff': 128,
-                    'batch': batch_size,
+                    'batch': batch_size_train,
                     'input_type':input_type,
                     'train_type': 'unprocessing'
                     }
@@ -171,6 +172,7 @@ def main(args):
     dataset_train = utils.dataset_input_fn(train_params)
     dataset_eval = utils.dataset_input_fn(eval_params)
     dataset_viz = utils.dataset_input_fn(viz_params)
+
 
     # print('train set len : ', tf.data.experimental.cardinality(dataset_train))
     # print('train set len : ', dataset_train.element_spec)
@@ -292,7 +294,7 @@ if __name__ == '__main__':
     parser.add_argument(
             '--model_sig',
             type=str,
-            default='_noise',
+            default='_mit_unp',
             help='model postfix')
 
     parser.add_argument(

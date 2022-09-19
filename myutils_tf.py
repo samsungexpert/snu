@@ -120,6 +120,15 @@ class bwutils():
         self.input_type = input_type
         self.output_type = output_type
 
+
+        if input_bits == 8:
+            self.dtype='uint8'
+        elif input_bits == 16:
+            self.dtype='uint16'
+        else:
+            print('known input_bits', input_bits)
+            exit()
+
         # self.input_scale = input_max / 255.
 
         if loss_mode == 'square' or loss_mode == 'mse' or loss_mode=='2norm':
@@ -253,7 +262,7 @@ class bwutils():
         return image
 
 
-    def get_image_from_single_example(self, example, key='image', num_channels=3, dtype='uint16'):
+    def get_image_from_single_example(self, example, key='image', num_channels=3, dtype='uint8'):
 
         patch_size = self.patch_size
 
@@ -262,7 +271,7 @@ class bwutils():
         }
         parsed = tf.io.parse_single_example(example, feature)
 
-        image = tf.io.decode_raw(parsed[key], dtype)
+        image = tf.io.decode_raw(parsed[key], out_type=dtype)
         image = tf.cast(image, tf.float32)
         image = tf.reshape(image, [patch_size, patch_size, num_channels])
 
@@ -413,7 +422,7 @@ class bwutils():
         image = image + noise_gaussian + noise_poisson
 
         image = tf.clip_by_value(image, 0, 1)
-
+        print('image.shape', image.shape)
         return image
 
 
@@ -580,7 +589,7 @@ class bwutils():
 
     def parse_tfrecord_unp(self, example, mode):
 
-        srgb = self.get_image_from_single_example(example, key='image', num_channels=3)
+        srgb = self.get_image_from_single_example(example, key='image', num_channels=3, dtype=self.dtype)
         if mode == tf.estimator.ModeKeys.TRAIN:
             srgb = self.data_augmentation(srgb)
 
@@ -609,8 +618,10 @@ class bwutils():
 
         if params['train_type'] == 'unprocessing':
             parse_fn = self.parse_tfrecord_unp
+            print('hello unprocessing')
         elif params['train_type'] == 'demosaic':
             parse_fn = self.parse_tfrecord_demosaic
+            print('hello demosaic')
 
         dataset = dataset.map(partial(parse_fn, mode=params['mode']),
                               num_parallel_calls=tf.data.experimental.AUTOTUNE)
@@ -807,7 +818,11 @@ class TensorBoardImage(Callback):
 
     def write_image(self, tag, epoch):
         gidx = 0
+        # print('<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<', len(list(self.dataloader)))
+        # return
         for idx,  (x, y) in enumerate(self.dataloader):
+            print('<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<')
+            print('x.shape ', x.shape, ', y.shape ', y.shape)
             pred   = self.model(x)
             diff   = tf.math.abs(y-pred)
 
