@@ -66,16 +66,20 @@ def main(args):
 
 
     if 'mit' in model_sig:
-        input_bits = 8
+        input_bits = 16
         input_max = 255
-        data_path = '/home/team19/datasets/mit/tfrecords'
-        # data_path = '/data03/team01/mit/tfrecords'
+        if 'team19' in os.getcwd():
+            data_path = '/home/team19/datasets/mit/tfrecords'
+        else:
+            data_path = '/data03/team01/mit/tfrecords'
         cnt_train, cnt_valid = 260000, 6000 # mit
     elif 'pixelshift' in model_sig:
         input_bits = 16
         input_max = 65535
-        data_path = '/home/team19/datasets/pixelshift/tfrecords'
-        # data_path = '/data03/team01/pixelshift/tfrecords'
+        if 'team19' in os.getcwd():
+            data_path = '/home/team19/datasets/pixelshift/tfrecords'
+        else:
+            data_path = '/data03/team01/pixelshift/tfrecords'
         cnt_train, cnt_valid =  92800, 4800 # pixelshift
     else:
         ValueError('unknown model_sig path', model_sig)
@@ -90,15 +94,15 @@ def main(args):
         files = tf.io.gfile.glob(os.path.join(path, f'*{keyword}*tfrecords'))
         files.sort()
         return files
-    train_files = get_tfrecords(data_path, 'train')
-    eval_files = get_tfrecords(data_path, 'test') + get_tfrecords(data_path, 'valid')
-    viz_files = get_tfrecords(data_path, 'viz')
+    train_files = get_tfrecords(data_path, 'cyclegan_train')
+    # eval_files = get_tfrecords(data_path, 'test') + get_tfrecords(data_path, 'valid')
+    eval_files = get_tfrecords(data_path, 'cyclegan_test') # + get_tfrecords(data_path, 'valid')
+    viz_files = get_tfrecords(data_path, 'cyclegan_viz')
 
     print('data_path, ', data_path)
     print('\n'.join(train_files))
     print('\n'.join(eval_files))
     print('\n'.join(viz_files))
-
 
     # get util class
     if args.test:
@@ -221,8 +225,9 @@ def main(args):
 
         ## callbacks for training loop
         callbacks = get_training_callbacks(['ckeckpoint', 'tensorboard', 'image'],
-                                            base_path=base_path, model_name=model_name + model_sig, input_bias = args.input_bias,
-                                            dataloader=dataset_viz, cnt_viz=cnt_viz, initial_value_threshold=prev_loss)
+                                            base_path=base_path, model_name=model_name + model_sig+ '_'+ args.cfa_pattern,
+                                            input_bias = args.input_bias, dataloader=dataset_viz,
+                                            cnt_viz=cnt_viz, initial_value_threshold=prev_loss)
         ## lr callback
         callback_lr = get_scheduler(type='cosine', lr_init=LEARNING_RATE, steps=myepoch)
         callbacks.append(callback_lr)
@@ -289,23 +294,23 @@ if __name__ == '__main__':
     parser.add_argument(
             '--cfa_pattern',
             type=str,
-            default='sedec',
+            default='tetra',
             help='bayer, tetra, nona, sedec')
 
 
     parser.add_argument(
             '--model_sig',
             type=str,
-            default='_mit',
+            default='_cycle_mit',
             help='model postfix')
 
     parser.add_argument(
             '--data_path',
             type=str,
-            default='/home/team19/datasets/pixelshift/tfrecords',
+            # default='/home/team19/datasets/pixelshift/tfrecords',
             # default='/data03/team01/pixelshift/tfrecords',
             # default='/home/team19/datasets/mit/tfrecords',
-            # default='/data03/team01/mit/tfrecords',
+            default='/data03/team01/mit/tfrecords',
             help='add noise on dec input')
 
     parser.add_argument(

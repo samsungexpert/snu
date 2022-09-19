@@ -101,6 +101,7 @@ def main(model_name, model_sig):
     for idx, file in enumerate(files):
         arr = np.load(file)    # (0, 65535)
         arr = arr / (2**16 -1) # (0, 1)
+        arr = arr / np.amax(arr)
         # arr = arr ** (1/2.2)   # (0, 1)
 
 
