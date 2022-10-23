@@ -22,19 +22,19 @@ def mlpBlock(dim:int, name=None):
         y = gelu(y)
         return layers.Dense(x.shape[-1], name=name2)(y)
     return func
-  
-  
+
+
 mlp_block = mlpBlock
-  
+
 def mixerBlock(token_mlp_dim, channels_mlp_dim, name=None, isNorm=True):
   def func(x):
       if isNorm:
           y = layers.LayerNormalization()(x)
       else:
           y=x
-      y = tf.transpose(y, [0, 1, 3, 2])        
+      y = tf.transpose(y, [0, 1, 3, 2])
       y = mlpBlock(token_mlp_dim, name=name+'_token_mixing')(y)
-      y = tf.transpose(y, [0, 1, 3, 2])        
+      y = tf.transpose(y, [0, 1, 3, 2])
       x = x + y
       if isNorm:
           y = layers.LayerNormalization()(x)
@@ -43,10 +43,10 @@ def mixerBlock(token_mlp_dim, channels_mlp_dim, name=None, isNorm=True):
       y = x + mlpBlock(channels_mlp_dim, name=name+'_channel_mixing')(y)
       return y
   return func
-  
+
 # MLP Mixer model
 def mlpMixer(input_shape=(3, 128, 128), patch_size=16, hidden_dim = 512, depth=6, isNorm=True):
-    
+
     token_mlp_dim, channels_mlp_dim = input_shape[1:]
     print(token_mlp_dim, channels_mlp_dim)
 

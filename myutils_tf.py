@@ -67,6 +67,7 @@ class bwutils():
                 input_type='rgb',
                 output_type='data_only', # 'data_only', 'data_with_mask'
                 cfa_pattern='tetra',
+                file_type='tfrecord',
                 patch_size:int=128,
                 crop_size:int=128,
                 input_max = 1.,
@@ -103,6 +104,7 @@ class bwutils():
                 raise ValueError('unknown loss type, ', lt)
 
         self.cfa_pattern = cfa_pattern
+        self.file_type = file_type
         self.patch_size = patch_size
         self.crop_size = crop_size
         self.input_bits = input_bits
@@ -269,6 +271,7 @@ class bwutils():
         feature = {
             key: tf.io.FixedLenFeature((), tf.string)
         }
+
         parsed = tf.io.parse_single_example(example, feature)
 
         image = tf.io.decode_raw(parsed[key], out_type=dtype)
@@ -452,6 +455,7 @@ class bwutils():
             dtype = 'uint16'
 
         image = self.get_image_from_single_example(example, key='image', num_channels=3, dtype=dtype)
+
         if mode == tf.estimator.ModeKeys.TRAIN:
             image = self.data_augmentation(image)
 
@@ -467,6 +471,30 @@ class bwutils():
         print('====================== image.shape ', image.shape)
 
         return patternized, image
+
+    def parse_demosaic_png(self, image, mode):
+        if self.input_bits == 8:
+            dtype = 'uint8'
+        elif self.input_bits == 16:
+            dtype = 'uint16'
+
+        if mode == tf.estimator.ModeKeys.TRAIN:
+            image = self.data_augmentation(image)
+
+        image = self.scale_by_input_max(image)
+        image = tf.clip_by_value(image, 0, 1)
+
+        if self.input_bias:
+             image       = (image       * 2) - 1
+
+        patternized = self.get_patternized(image, self.input_type)
+
+        print('====================== patternized.shape ', patternized.shape)
+        print('====================== image.shape ', image.shape)
+
+        return patternized, image
+
+
 
 
     def parse_tfrecord_remosaic(self, example, mode):
@@ -614,14 +642,34 @@ class bwutils():
 
 
     def dataset_input_fn(self, params):
-        dataset = tf.data.TFRecordDataset(params['filenames'])
+        if params['file_type'] == 'tfrecord':
+            dataset = tf.data.TFRecordDataset(params['filenames'])
+        else:
+            print('hellow----->')
+            # print(params['filenames'])
+            dataset = tf.data.Dataset.from_tensor_slices(params['filenames'])
 
         if params['train_type'] == 'unprocessing':
             parse_fn = self.parse_tfrecord_unp
             print('hello unprocessing')
-        elif params['train_type'] == 'demosaic':
+        elif params['train_type'] == 'demosaic' and params['file_type'] == 'tfrecord':
             parse_fn = self.parse_tfrecord_demosaic
             print('hello demosaic')
+        elif params['train_type'] == 'demosaic' and params['file_type'] == 'png':
+
+            def load(image_file):
+                image = tf.io.read_file(image_file)
+                image = tf.image.decode_png(image)
+                input_image = tf.cast(image, tf.float32)
+                return image
+
+            dataset = dataset.map(load,
+                                  num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
+
+            parse_fn = self.parse_demosaic_png
+            print('hello demosaic png')
+
 
         dataset = dataset.map(partial(parse_fn, mode=params['mode']),
                               num_parallel_calls=tf.data.experimental.AUTOTUNE)
