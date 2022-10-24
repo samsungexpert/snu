@@ -260,7 +260,7 @@ if __name__ == '__main__':
     parser.add_argument(
             '--epoch',
             type=int,
-            default=1000,
+            default=200,
             help='epoch')
 
     parser.add_argument(
@@ -278,23 +278,19 @@ if __name__ == '__main__':
     parser.add_argument(
             '--cfa_pattern',
             type=str,
-            default='tetra',
+            default='sedec',
             help='bayer, tetra, nona, sedec')
-
 
     parser.add_argument(
             '--model_sig',
             type=str,
-            default='_cycle_mit',
+            default='_sedec_base',
             help='model postfix')
 
     parser.add_argument(
             '--data_path',
             type=str,
-            # default='/home/team19/datasets/pixelshift/tfrecords',
-            # default='/data03/team01/pixelshift/tfrecords',
-            # default='/home/team19/datasets/mit/tfrecords',
-            default='/data03/team01/mit/tfrecords',
+            default='/content/drive/MyDrive/Datasets/mit/images_sub10/tfrecords',
             help='add noise on dec input')
 
     parser.add_argument(
