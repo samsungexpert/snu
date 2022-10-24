@@ -71,7 +71,7 @@ def main(args):
     else:
         cache_enable=True
 
-    input_bits = 16
+    input_bits = 8
     utils = bwutils(input_type,
                     cfa_pattern=args.cfa_pattern,
                     patch_size=patch_size,
@@ -93,7 +93,6 @@ def main(args):
     ## dataset
     if args.test:
         data_path = '/Users/bw/Datasets/mit'
-        cache_enable=False
     def get_image_files(path, keyword):
         p = os.path.join(path, keyword, '**', '*.png')
         files = glob.glob(p, recursive=True)
@@ -131,7 +130,6 @@ def main(args):
         batch_size = 1
     batch_size_train = batch_size * NGPU  # 128
     batch_size_eval  = batch_size * NGPU
-    batch_size_viz   = batch_size  # 128
     batch_size_viz   = 16
     print(batch_size, batch_size_eval, batch_size_viz)
     # exit()
@@ -169,11 +167,11 @@ def main(args):
     dataset_viz = utils.dataset_input_fn(viz_params)
 
 
-    cnt_train, cnt_valid = 53322, 6000
+    cnt_train, cnt_valid = 260000, 6000
     if args.test:
         cnt_train, cnt_valid = 8, 8 # for test
 
-    cnt_viz = 10
+    cnt_viz = 16
 
 
     #########################
@@ -293,7 +291,7 @@ if __name__ == '__main__':
     parser.add_argument(
             '--data_path',
             type=str,
-            default='/content/drive/MyDrive/Datasets/mit/',
+            default='/content/drive/MyDrive/Datasets/mit/images_sub10',
             help='add noise on dec input')
 
     parser.add_argument(
@@ -306,7 +304,7 @@ if __name__ == '__main__':
             '--file_type',
             type=str,
             default='png',
-            help='file_type, default=png')
+            help='file_type, default=pngl, tfrecord')
 
     parser.add_argument(
             '--test',

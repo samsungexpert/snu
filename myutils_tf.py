@@ -649,12 +649,17 @@ class bwutils():
             # print(params['filenames'])
             dataset = tf.data.Dataset.from_tensor_slices(params['filenames'])
 
+
+        # print('train_type', params['train_type'])
+        # print('file_type', params['file_type'])
+        # exit()
         if params['train_type'] == 'unprocessing':
             parse_fn = self.parse_tfrecord_unp
             print('hello unprocessing')
         elif params['train_type'] == 'demosaic' and params['file_type'] == 'tfrecord':
             parse_fn = self.parse_tfrecord_demosaic
-            print('hello demosaic')
+            print('hello demosaic tfrecord')
+            # exit()
         elif params['train_type'] == 'demosaic' and params['file_type'] == 'png':
 
             def load(image_file):

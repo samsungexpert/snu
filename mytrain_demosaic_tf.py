@@ -61,48 +61,9 @@ def main(args):
     data_path = args.data_path
     model_sig = args.model_sig
     myepoch = args.epoch
+    file_type = args.file_type
 
     loss_type = ['rgb', 'yuv', 'ssim']  # 'rgb', 'yuv', 'ploss
-
-
-    if 'mit' in model_sig:
-        input_bits = 16
-        input_max = 255
-        if 'team19' in os.getcwd():
-            data_path = '/home/team19/datasets/mit/tfrecords'
-        else:
-            data_path = '/data03/team01/mit/tfrecords'
-        cnt_train, cnt_valid = 260000, 6000 # mit
-    elif 'pixelshift' in model_sig:
-        input_bits = 16
-        input_max = 65535
-        if 'team19' in os.getcwd():
-            data_path = '/home/team19/datasets/pixelshift/tfrecords'
-        else:
-            data_path = '/data03/team01/pixelshift/tfrecords'
-        cnt_train, cnt_valid =  92800, 4800 # pixelshift
-    else:
-        ValueError('unknown model_sig path', model_sig)
-        exit()
-
-
-    ## dataset
-    if args.test:
-        data_path = 'datasets/mit/tfrecords'
-        # data_path = 'datasets/pixelshift/tfrecords'
-    def get_tfrecords(path, keyword):
-        files = tf.io.gfile.glob(os.path.join(path, f'*{keyword}*tfrecords'))
-        files.sort()
-        return files
-    train_files = get_tfrecords(data_path, 'cyclegan_train')
-    # eval_files = get_tfrecords(data_path, 'test') + get_tfrecords(data_path, 'valid')
-    eval_files = get_tfrecords(data_path, 'cyclegan_test') # + get_tfrecords(data_path, 'valid')
-    viz_files = get_tfrecords(data_path, 'cyclegan_viz')
-
-    print('data_path, ', data_path)
-    print('\n'.join(train_files))
-    print('\n'.join(eval_files))
-    print('\n'.join(viz_files))
 
     # get util class
     if args.test:
@@ -110,6 +71,7 @@ def main(args):
     else:
         cache_enable=True
 
+    input_bits = 8
     utils = bwutils(input_type,
                     cfa_pattern=args.cfa_pattern,
                     patch_size=patch_size,
@@ -122,14 +84,37 @@ def main(args):
                     loss_scale=1e4,
                     cache_enable=cache_enable)
 
-
-
     base_path = 'model_dir'
     os.makedirs(base_path, exist_ok=True)
     model_dir = os.path.join(base_path, 'checkpoint', model_name + model_sig)
 
 
+    ## dataset
+    if args.test:
+        data_path = '/Users/bw/Datasets/mit/tfrecords'
+    def get_tfrecords(path, keyword):
+        files = tf.io.gfile.glob(os.path.join(path, f'*{keyword}*tfrecords'))
+        files.sort()
+        return files
+    train_files = get_tfrecords(data_path, 'train')
+    # eval_files = get_tfrecords(data_path, 'test') + get_tfrecords(data_path, 'valid')
+    eval_files = get_tfrecords(data_path, 'val') # + get_tfrecords(data_path, 'valid')
+    viz_files = get_tfrecords(data_path, 'viz')
 
+    if args.test:
+        train_files = get_tfrecords(data_path, 'val')
+        eval_files = get_tfrecords(data_path, 'val')
+        viz_files = get_tfrecords(data_path, 'viz')
+
+
+    print('data_path, ', data_path)
+    print('\n'.join(train_files))
+    print('\n'.join(eval_files))
+    print('\n'.join(viz_files))
+
+    print(len(train_files))
+    print(len(eval_files))
+    print(len(viz_files))
 
 
     ## training params setup
@@ -144,7 +129,6 @@ def main(args):
         batch_size = 1
     batch_size_train = batch_size * NGPU  # 128
     batch_size_eval  = batch_size * NGPU
-    batch_size_viz   = batch_size  # 128
     batch_size_viz   = 16
     print(batch_size, batch_size_eval, batch_size_viz)
     # exit()
@@ -154,7 +138,8 @@ def main(args):
                     'shuffle_buff': 256,
                     'batch': batch_size_train,
                     'input_type':input_type,
-                    'train_type': 'demosaic'
+                    'train_type': 'demosaic',
+                    'file_type': file_type
                     }
     eval_params = {'filenames': eval_files,
                    'mode': tf.estimator.ModeKeys.EVAL,
@@ -162,7 +147,8 @@ def main(args):
                    'shuffle_buff': 256,
                    'batch': batch_size_eval,
                    'input_type': input_type,
-                   'train_type': 'demosaic'
+                   'train_type': 'demosaic',
+                    'file_type': file_type
                    }
 
     viz_params = {'filenames': viz_files,
@@ -171,18 +157,16 @@ def main(args):
                    'shuffle_buff': 256,
                    'batch': batch_size_viz,
                    'input_type': input_type,
-                   'train_type': 'demosaic'
+                   'train_type': 'demosaic',
+                    'file_type': file_type
                    }
 
     dataset_train = utils.dataset_input_fn(train_params)
     dataset_eval = utils.dataset_input_fn(eval_params)
     dataset_viz = utils.dataset_input_fn(viz_params)
 
-    # print('train set len : ', tf.data.experimental.cardinality(dataset_train))
-    # print('train set len : ', dataset_train.element_spec)
 
-
-
+    cnt_train, cnt_valid = 260000, 6000
     if args.test:
         cnt_train, cnt_valid = 8, 8 # for test
     cnt_viz = 16
@@ -318,6 +302,12 @@ if __name__ == '__main__':
             type=bool,
             default=False,
             help='test')
+
+    parser.add_argument(
+            '--file_type',
+            type=str,
+            default='tfrecord',
+            help='file_type, default=png, tfrecord')
 
     parser.add_argument(
             '--test',
