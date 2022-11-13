@@ -49,9 +49,11 @@ def load_checkpoint_if_exists(model, model_dir, model_name, ckpt_name=None):
             trained_weights = trained_weights[-1]
             print('---------------------> ', trained_weights)
             model.load_weights(trained_weights)
-            idx = trained_weights.rfind(model_name)
-            prev_epoch = int(trained_weights[idx-6:idx-1])
-            prev_loss = float(trained_weights.split('_')[-1][:-3])
+            # idx = trained_weights.rfind(model_name)
+            # prev_epoch = int(trained_weights[idx-6:idx-1])
+            # prev_loss = float(trained_weights.split('_')[-1][:-3])
+            wname = trained_weights.split('/')[-1]
+            prev_epoch = int(wname[:5])
             print('prev epoch', prev_epoch)
         else:
             print('===========> TRAINED WEIGHTS NOT EXIST', len(trained_weights))
@@ -881,8 +883,8 @@ class TensorBoardImage(Callback):
         # print('<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<', len(list(self.dataloader)))
         # return
         for idx,  (x, y) in enumerate(self.dataloader):
-            print('<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<')
-            print('x.shape ', x.shape, ', y.shape ', y.shape)
+            # print('<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<')
+            # print('x.shape ', x.shape, ', y.shape ', y.shape)
             pred   = self.model(x)
             diff   = tf.math.abs(y-pred)
 
