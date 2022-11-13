@@ -562,7 +562,7 @@ class bwutils():
 
         # cast & normalize
         srgb = tf.cast(srgb, tf.float32) / (2**8 - 1)
-        raw  = tf.cast(raw,  tf.float32) / (2**16 -1)
+        raw  = tf.cast(raw,  tf.float32) / (2**10 -1) ## <-- normalized to 1
 
         # raw 1ch to 3ch
         print('>>>>>>> raw.shape', raw.shape)
@@ -586,6 +586,9 @@ class bwutils():
              srgb = (srgb * 2) - 1
              raw  = (raw  * 2) - 1
 
+
+        print('<<<<<<< srgb.shape', srgb.shape)
+
         return srgb, raw
 
 
@@ -600,6 +603,8 @@ class bwutils():
         # add noise
         image = self.add_noise_batch(image)
 
+        # digital gain
+
         # iwb
         if mode == tf.estimator.ModeKeys.TRAIN:
             rgain = tf.random.uniform(shape=[1], minval=1.9, maxval=2.4)
@@ -607,13 +612,15 @@ class bwutils():
             bgain = tf.random.uniform(shape=[1], minval=1.5, maxval=1.9)
             gain = tf.concat([rgain, ggain, bgain], axis=-1)
         else:
-            gain = tf.constant([(1.9+2.4)/2, 1., (1.5+1.9)/2 ], dtype=tf.float32)
+            # gain = tf.constant([(1.9+2.4)/2, 1., (1.5+1.9)/2 ], dtype=tf.float32)
+            gain = tf.constant([1., 1., 1. ], dtype=tf.float32)
 
         image = image * gain
 
         image = tf.clip_by_value(image, 0, 1)
 
         return image
+
 
     def parse_tfrecord_unp(self, example, mode):
 
