@@ -1,0 +1,36 @@
+확률 통계
+범위:
+● 확률의 개념 (확률, 확률의 법칙, 조건부 확률, 베이즈정리)
+● 확률변수 및 확률분포 (이산/연속 확률변수, 기대값, 분산, 표준편차, 결합/주변확률분포,
+공분산, 상관계수, 확률변수의 독립, 여러가지 확률분포의 예 )
+● 표본분포 (표본분포의 개념 및 성질, 표본평균의 분포, 여러가지 표본분포의 예)
+● 통계적추론 (점추정, 구간추정, 추정량 평가, 최대가능도법(MLE), 유의성 검정
+● 모평균과 모분산에 관한 추론 (모평균의 점추정, 구간추정, 유의성 검정, 대응 이표본에
+의한 모평균비교, 독립 이표본에 의한 모평균 비교, 두 모집단의 분산의 비에 관한 추론)
+● 상관분석과 회귀분석 (상관계수의 검정, 단순선형회귀분석- 회귀계수의 추정, 결정계수,
+회귀직선의 유의성 검정, 평균반응에 대한 추론, 다중선형회귀분석- 회귀계수의 추정,
+결정계수, 유의성검정, 범주형설명변수)
+참고서적: 일반통계학, 영지문화사, http://www.yes24.com/Product/Goods/167300
+관련 동영상 강의: 통계학의 이해 I/II, 숙명여대 여인권교수님
+http://www.kocw.net/home/cview.do?cid=857b615651ef3607#.Y6UKvWW1a0A.link
+http://www.kocw.net/home/cview.do?cid=d02b78becbed2dc2#.Y6UK1yOPj9c.link
+
+
+선형대수학
+범위 및 참고서적:
+1장~6장, 선형 대수학과 그 응용 (길버트 스트랭)
+http://www.yes24.com/Product/Goods/8766786
+관련 동영상 강의:
+https://ocw.mit.edu/courses/18-06-linear-algebra-spring-2010/video_galleries/video-lectures/
+
+
+Python 기초
+범위 및 참고서적: The Python Tutorial
+https://docs.python.org/3/tutorial/ (English)
+https://docs.python.org/ko/3/tutorial/ (우리말 번역)
+참고서적(추가):
+● Starting Out with Python (4th Edition), Tony Gaddis, Pearson, 2017
+● 데이터과학을 위한 파이션 프로그래밍, 최성철, 한빛아카데미, 2019
+관련 동영상 강의:
+https://www.codecademy.com/learn/learn-python-3
+https://youtu.be/KL1MIuBfWe0
